@@ -94,9 +94,22 @@ src-tauri/src/
   is on by default — only `json` needs to be requested.
 - **keyring 4.x** enables macOS Keychain and Windows Credential Manager through
   its default `v1` feature. Do not pass `apple-native` / `windows-native`.
+- **AppKit is main-thread-only.** The global-shortcut handler and the
+  single-instance callback run on tokio worker threads; touching NSWindow from
+  them crashes with EXC_BREAKPOINT (this happened). Tauri's own window methods
+  marshal internally; anything hand-rolled must go through
+  `run_on_main_thread`. The nspanel handle is not `Send` — fetch it *inside*
+  the main-thread closure via `get_webview_panel`, don't move it in.
+- **tauri-nspanel replaces tao's window delegate on macOS**, so
+  `WindowEvent::Focused` never fires there. Blur-dismissal lives in the panel
+  delegate (`launcher.rs`); the `on_window_event` handler in `lib.rs` is for
+  Windows. The crate is pinned by rev in Cargo.toml — bump deliberately.
+- **Launcher dismissal needs a blur grace period** (400ms, `launcher.rs`):
+  a resign-key/blur arriving right after show() is part of the show
+  transition; hiding on it makes the launcher flash open and vanish.
 
 ## Immediate next task
 
-Milestone 1 is mostly done; the outstanding items are in PRD §11. Start with
-**adding `tauri-nspanel`** — without it the macOS window steals focus on show,
-which breaks the core flow. See PRD §15.1.
+Milestone 1 remaining (see PRD §11): user-configurable + persisted shortcut,
+and measuring/defending window-show latency. The NSPanel conversion and
+hide-on-blur are done. Then Milestone 2 (SQLite storage).

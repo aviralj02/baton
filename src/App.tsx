@@ -40,9 +40,9 @@ export default function App() {
   };
 
   return (
-    <div className="h-full p-3">
+    <div className="h-screen w-screen">
       <Command
-        className="flex h-full flex-col overflow-hidden rounded-xl border border-black/10 bg-white/95 shadow-2xl backdrop-blur-xl dark:border-white/10 dark:bg-neutral-900/95"
+        className="flex h-full flex-col overflow-hidden rounded-xl border border-black/10 bg-white/60 dark:border-white/10 dark:bg-neutral-900/50"
         onKeyDown={(e) => {
           if (hasMod(e) && e.key === "Enter") {
             e.preventDefault();

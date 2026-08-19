@@ -27,6 +27,11 @@ pub fn run() {
         }));
     }
 
+    #[cfg(target_os = "macos")]
+    {
+        builder = builder.plugin(tauri_nspanel::init());
+    }
+
     builder
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_os::init())
@@ -52,13 +57,31 @@ pub fn run() {
             tray::build(app)?;
 
             use tauri_plugin_global_shortcut::GlobalShortcutExt;
-            app.global_shortcut().register(summon)?;
+            // Registration can fail if another app already owns the combo.
+            // Reported, not fatal: the tray still opens the launcher.
+            if let Err(e) = app.global_shortcut().register(summon) {
+                eprintln!("[baton] could not register {summon:?}: {e}");
+            }
 
-            // Window is pre-created hidden by tauri.conf.json (`visible: false`).
-            // Warm the webview so the first summon is not the first paint.
-            let _ = launcher::window(&app.handle());
+            launcher::configure(&app.handle());
 
             Ok(())
+        })
+        .on_window_event(|win, event| {
+            // Dismiss on focus loss, the way Spotlight and Raycast do, but
+            // ignore the spurious blur emitted while the window is coming
+            // forward — otherwise the launcher flashes open and vanishes.
+            //
+            // Windows-only in practice: on macOS tauri-nspanel replaces tao's
+            // window delegate, so Focused events never fire there; dismissal
+            // is handled by the panel delegate in launcher::macos instead.
+            if let tauri::WindowEvent::Focused(focused) = event {
+                if win.label() == launcher::MAIN_WINDOW {
+                    if !focused && !launcher::in_blur_grace() {
+                        let _ = win.hide();
+                    }
+                }
+            }
         })
         .invoke_handler(tauri::generate_handler![hide_launcher])
         .run(tauri::generate_context!())

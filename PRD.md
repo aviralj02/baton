@@ -425,8 +425,8 @@ touching anything else.
 - [x] Dock-less on macOS (`ActivationPolicy::Accessory`), `skipTaskbar` on Windows
 - [x] Single-instance guard
 - [x] `cmdk` launcher UI on fake data, ↑↓/↵ navigation, Escape to dismiss
-- [ ] **Hide on blur** — window should dismiss when focus leaves it
-- [ ] **macOS `NSPanel` conversion** (see "Known gaps" — this is the big one)
+- [x] **Hide on blur** — panel-delegate resign-key on macOS, `Focused(false)` elsewhere
+- [x] **macOS `NSPanel` conversion** — non-activating panel via `tauri-nspanel`, pinned rev
 - [ ] User-configurable shortcut, persisted
 - [ ] Measure and defend show latency
 
@@ -521,14 +521,16 @@ search, cross-device sync.
 
 ## 15. Known gaps / risks
 
-1. **macOS `NSPanel` conversion is not done.** A standard Tauri window activates
-   the app and steals focus when shown, which breaks the core flow — the panel
-   must appear *over* the AI tool the user is in without deactivating it.
-   The fix is the community `tauri-nspanel` plugin
-   (`https://github.com/ahkohd/tauri-nspanel`, v2 branch). It was deliberately
-   left out of the scaffold because it is a git dependency that could break the
-   build. **Add it first thing in Milestone 1 and pin the revision.** Windows
-   needs no equivalent.
+1. **macOS `NSPanel` conversion — DONE.** The window is swizzled into a
+   non-activating `NSPanel` via `tauri-nspanel` (pinned to rev `18ffb9a2`).
+   Style mask `NonActivatingPanel`, floating level, collection behaviour
+   `canJoinAllSpaces | fullScreenAuxiliary`, `hidesOnDeactivate` off. This is
+   what lets the launcher appear over fullscreen apps without switching Spaces:
+   a regular NSWindow cannot become key over another app's fullscreen Space.
+   Consequence: the crate replaces tao's window delegate, so Tauri
+   `WindowEvent::Focused` never fires on macOS — dismissal is handled by the
+   panel delegate's `window_did_resign_key` instead. Windows needs none of
+   this and keeps the plain window path.
 
 2. **Code signing, twice.** Apple Developer account ($99/yr) for macOS
    notarization; a Windows code-signing certificate or users get SmartScreen
