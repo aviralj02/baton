@@ -436,15 +436,17 @@ Implement create / save / edit / delete / search / copy against real SQLite. No
 AI yet. **The app should be genuinely useful with hand-written contexts at the
 end of this milestone** — that is the checkpoint.
 
-- [ ] `rusqlite` connection in Tauri managed state, migrations on startup
-- [ ] `Context` struct + serde, JSON into `contexts.content`
-- [ ] FTS5 virtual table + sync triggers
-- [ ] Tauri commands: `list_contexts`, `search_contexts`, `get_context`,
+- [x] `rusqlite` connection in Tauri managed state, migrations on startup
+- [x] `Context` struct + serde, JSON into `contexts.content`
+- [x] FTS5 virtual table + sync triggers
+- [x] Tauri commands: `list_contexts`, `search_contexts`, `get_context`,
       `save_context`, `delete_context`, `delete_all_data`, `copy_context`
-- [ ] `copy_context` renders the struct to markdown in Rust and returns it
-- [ ] Replace `FAKE_CONTEXTS` in `src/App.tsx` with real `invoke` calls
-- [ ] Context detail view (Flow D) with Copy / Edit / Update / Delete
-- [ ] Main browsing window (separate from the launcher panel)
+- [x] `copy_context` renders the struct to markdown in Rust and returns it
+- [x] Replace `FAKE_CONTEXTS` in `src/App.tsx` with real `invoke` calls
+- [x] Context detail view (Flow D) with Copy / Edit / Delete
+- [x] Main browsing window (separate from the launcher panel)
+- [ ] **Update** action on a context — deferred to Milestone 3, since it means
+      "paste a newer conversation and re-derive", which needs the LLM
 
 ### Milestone 3 — AI generation
 

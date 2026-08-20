@@ -72,14 +72,35 @@ Full prompt text for create/update/handoff is in PRD §10.
 
 ```
 src/                     React webview — pure UI, no secrets
-  App.tsx                cmdk launcher (currently on FAKE DATA)
-  types.ts               Context interface, mirrors the Rust struct
+  App.tsx                routes on ?view=browser
+  Launcher.tsx           cmdk launcher panel
+  Browser.tsx            main browsing window (PRD §13)
+  components/
+    ContextDetail.tsx    Flow D: view / edit / copy / delete
+  lib/api.ts             every invoke() call lives here, nowhere else
   lib/platform.ts        IS_MAC, MOD_LABEL, hasMod()
+  types.ts               Context interface, mirrors the Rust struct
 src-tauri/src/
   lib.rs                 plugin registration, global shortcut, setup hook
-  launcher.rs            show / hide / toggle
+  commands.rs            the whole IPC surface
+  db.rs                  SQLite: schema, migrations, FTS5, queries
+  context.rs             Context type + markdown rendering
+  launcher.rs            show / hide / toggle, NSPanel, vibrancy
   tray.rs                menu bar / system tray
 ```
+
+## Storage
+
+`~/Library/Application Support/com.aviralj02.baton/baton.sqlite3` on macOS
+(app-data dir keyed by bundle identifier). Schema version lives in
+`PRAGMA user_version`; add a numbered block in `db::migrate` to change it —
+never edit an existing block, it has already run on real data.
+
+`cargo test --lib` covers the storage layer (12 tests). The FTS index is
+*external-content*: it stores no copy of the rows and is kept in sync purely by
+the three triggers. If you touch the `contexts` schema, verify
+`fts_index_stays_in_sync_on_update_and_delete` still passes — a broken trigger
+makes search silently return stale results rather than fail.
 
 ## Gotchas already hit
 
@@ -110,6 +131,6 @@ src-tauri/src/
 
 ## Immediate next task
 
-Milestone 1 remaining (see PRD §11): user-configurable + persisted shortcut,
-and measuring/defending window-show latency. The NSPanel conversion and
-hide-on-blur are done. Then Milestone 2 (SQLite storage).
+Milestone 3 (AI generation) — see PRD §11. Also outstanding from Milestone 1:
+user-configurable + persisted shortcut, window-show latency measurement, and a
+first real Windows test pass.
