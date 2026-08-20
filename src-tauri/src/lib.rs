@@ -1,6 +1,12 @@
+mod commands;
+mod context;
+mod db;
 mod launcher;
 mod tray;
 
+pub const BROWSER_WINDOW: &str = "browser";
+
+use tauri::Manager;
 use tauri_plugin_global_shortcut::{Code, Modifiers, Shortcut, ShortcutState};
 
 /// Default summon shortcut. Cmd+Shift+Space on macOS, Ctrl+Shift+Space elsewhere.
@@ -65,6 +71,13 @@ pub fn run() {
 
             launcher::configure(&app.handle());
 
+            let dir = app.path().app_data_dir().map_err(|e| {
+                format!("no app data dir: {e}")
+            })?;
+            std::fs::create_dir_all(&dir)?;
+            let conn = db::open(&dir.join("baton.sqlite3"))?;
+            app.manage(db::Db(std::sync::Mutex::new(conn)));
+
             Ok(())
         })
         .on_window_event(|win, event| {
@@ -83,12 +96,18 @@ pub fn run() {
                 }
             }
         })
-        .invoke_handler(tauri::generate_handler![hide_launcher])
+        .invoke_handler(tauri::generate_handler![
+            commands::list_contexts,
+            commands::search_contexts,
+            commands::get_context,
+            commands::save_context,
+            commands::delete_context,
+            commands::delete_all_data,
+            commands::copy_context,
+            commands::render_context,
+            commands::hide_launcher,
+            commands::open_main_window,
+        ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
-}
-
-#[tauri::command]
-fn hide_launcher(app: tauri::AppHandle) {
-    launcher::hide(&app);
 }

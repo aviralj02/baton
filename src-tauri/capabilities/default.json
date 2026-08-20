@@ -2,7 +2,10 @@
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
   "description": "Capability for the launcher window",
-  "windows": ["main"],
+  "windows": [
+    "main",
+    "browser"
+  ],
   "permissions": [
     "core:default",
     "core:window:allow-hide",
@@ -15,6 +18,8 @@
     "clipboard-manager:allow-write-text",
     "clipboard-manager:allow-read-text",
     "global-shortcut:default",
-    "autostart:default"
+    "autostart:default",
+    "core:window:allow-close",
+    "core:webview:allow-create-webview-window"
   ]
 }
