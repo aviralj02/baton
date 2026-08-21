@@ -450,13 +450,34 @@ end of this milestone** — that is the checkpoint.
 
 ### Milestone 3 — AI generation
 
-- [ ] Settings pane: API key entry, stored via `keyring`
-- [ ] `anthropic.rs` — `reqwest` client, key read from keystore per call
-- [ ] JSON Schema for `Context`, wired to `output_config.format`
-- [ ] `create_context_from_conversation` command (Create prompt)
-- [ ] `update_context_from_conversation` command (Update prompt)
-- [ ] Paste-conversation UI + loading state
-- [ ] Persist the raw conversation to `sources` (never to logs)
+- [x] `ai.rs` — `reqwest` client, structured outputs, three prompts
+- [x] `create_context_from_conversation` (Create prompt)
+- [x] `update_context_from_conversation` (Update prompt)
+- [x] `generate_handoff` (Handoff prompt)
+- [x] Paste-and-generate UI with loading state, replacing the field form as the
+      entry point
+- [x] Raw conversation saved to `sources` (never to logs)
+- [x] API proxy (`proxy/worker.js`) holding the key, with Gemini + Anthropic
+      adapters and translation tests
+- [ ] **Deploy the proxy and set `BATON_API_BASE`** — nothing works until this
+      exists; the default URL is a placeholder. Steps in §14c.
+- [ ] **Create the `RATE_LIMIT` KV namespace** — without it the daily cap is not
+      enforced and spend is unbounded (§14c)
+- [ ] Update §14 wording: conversations now transit our infrastructure
+
+**Provider choice lives in the proxy, not the app.** Baton speaks the
+Anthropic Messages format; the Worker translates to Gemini (default,
+`gemini-3.7-flash`) or Anthropic. A desktop app cannot change providers without
+a rebuild-and-redistribute cycle, so the switch belongs server-side. This is
+the "add an abstraction only when multiple providers are actually needed"
+point from §11 — it arrived, and the cheapest place to put it was the proxy.
+
+**Key handling changed from the original PRD.** There is no user-supplied API
+key and no settings pane. The app calls a proxy we operate, which injects the
+key. An embedded key would be a public key — `strings` on the binary or a
+debugging proxy recovers it immediately, and the bill is unbounded. The
+tradeoff is that we now run infrastructure and handle other people's
+conversations; see `proxy/README.md`.
 
 ### Milestone 4 — Handoff polish
 
@@ -520,6 +541,119 @@ search, cross-device sync.
 | 9 | **No provider abstraction** | Per the original PRD. Add one only when a second provider actually exists. |
 
 ---
+
+## 14b. Open decision — raw conversation storage
+
+`sources` now holds unfiltered pasted conversations, indefinitely, in plaintext,
+inside a Time Machine backup. Developers paste API keys, tokens and internal
+URLs into AI chats constantly, so this is a materially larger exposure than the
+structured contexts beside it.
+
+Three options, cheapest first:
+
+1. **Don't persist raw sources** — extract, then discard. Most consistent with
+   §9's "raw conversations should not be logged".
+2. **Expire them** — keep N days, then drop. Bounds the window.
+3. **Encrypt the database** — SQLCipher with the key in the OS keystore, which
+   is what Raycast does. `keyring` is already a dependency, so key storage is
+   solved; the work is swapping the SQLite driver.
+
+Currently option 0: kept forever, unencrypted. Decide before any real
+distribution.
+
+## 14c. Hosting — the API proxy
+
+Generation does not work until the proxy is deployed. Until then
+`BATON_API_BASE` points at a placeholder that does not resolve.
+
+### Why a proxy exists at all
+
+The app ships with no API key. Anything inside a distributed binary is public —
+`strings` on the app, or a debugging proxy on the wire, recovers an embedded key
+in seconds, and the resulting bill has no ceiling. The key lives on a server we
+control; the app only ever talks to that server.
+
+### Why provider choice lives there too
+
+Baton always speaks the **Anthropic Messages** wire format. The Worker
+translates to Gemini (default) or Anthropic based on its `PROVIDER` var.
+
+A desktop app cannot change providers without rebuilding, re-signing, and
+getting every user to update. In the Worker it is one variable and a deploy —
+which also makes provider fallback possible without touching clients. New
+providers are added as adapters in `proxy/worker.js`, never as branching in
+`ai.rs`.
+
+### Deploy
+
+`proxy/` is a complete Worker project — there is nothing else to scaffold.
+
+```bash
+cd proxy
+npx wrangler login                       # opens a browser; needs a Cloudflare account
+npx wrangler secret put GEMINI_API_KEY   # paste the key; stored by Cloudflare, not in git
+npx wrangler deploy                      # prints the live URL
+```
+
+Then rebuild the app against the printed URL:
+
+```bash
+BATON_API_BASE=https://baton-proxy.<subdomain>.workers.dev pnpm tauri build
+```
+
+Once a real domain exists, change the default in `src-tauri/src/ai.rs` so plain
+`pnpm tauri build` is correct without the env var.
+
+### Rate limiting (do this before sharing the app)
+
+The daily cap is the only thing bounding spend, and it needs a KV namespace:
+
+```bash
+npx wrangler kv namespace create RATE_LIMIT
+```
+
+Paste the printed id into the commented `[[kv_namespaces]]` block in
+`proxy/wrangler.toml`, uncomment it, and redeploy. **Without KV the Worker still
+runs but enforces no cap.**
+
+### Configuration
+
+| Setting | Where | Notes |
+|---|---|---|
+| `PROVIDER` | `wrangler.toml` `[vars]` | `gemini` (default) or `anthropic` |
+| `MODEL` | `wrangler.toml` `[vars]` | optional; defaults `gemini-3.7-flash` / `claude-opus-5` |
+| `GEMINI_API_KEY` / `ANTHROPIC_API_KEY` | `wrangler secret put` | never in git |
+| `RATE_LIMIT` | KV binding | omit and the cap is not enforced |
+
+### What the Worker enforces
+
+`POST /v1/messages` only · model pinned server-side (callers cannot choose the
+model you pay for) · 1MB body cap · 100 requests per device per day.
+
+The device id is client-generated and spoofable — friction against casual
+abuse, not authentication. If the endpoint leaks publicly, move to signed tokens
+or accounts.
+
+### Tests
+
+```bash
+node proxy/worker.test.mjs
+```
+
+Stubs `fetch` and asserts the request sent upstream and the response returned to
+Baton, including split text blocks, blocked responses becoming
+`stop_reason: "refusal"`, empty output failing loudly rather than saving an
+empty context, and the rate limit.
+
+### Cost
+
+| Model | Typical extraction | Full-session dump |
+|---|---|---|
+| `gemini-3.7-flash` | fractions of a cent | a few cents |
+| `claude-opus-5` | ~$0.12 | ~$0.50 |
+
+Extraction is compression, not hard reasoning, which is why a Flash-tier model
+is the default. Confirm current rates before budgeting.
 
 ## 15. Known gaps / risks
 

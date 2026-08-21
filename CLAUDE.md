@@ -56,7 +56,19 @@ The window starts **hidden**. Summon with `⌘⇧Space` (macOS) / `Ctrl⇧Space`
 
 ## Anthropic API
 
-No official Rust SDK — raw `reqwest` to `POST https://api.anthropic.com/v1/messages`.
+No official Rust SDK — raw `reqwest` in `src-tauri/src/ai.rs`.
+
+**The app has no API key.** It POSTs to a proxy we run (`proxy/worker.js`),
+which injects the key. Never embed a key in the binary: `strings` or a wire
+proxy recovers it instantly. `BATON_API_BASE` overrides the endpoint at build
+time.
+
+**The app is provider-agnostic and must stay that way.** Baton always speaks
+the Anthropic Messages format; the Worker translates to Gemini (the default) or
+Anthropic based on its `PROVIDER` var. Do not add provider branching to
+`ai.rs` — Baton is a desktop app, so a client-side switch means rebuilding and
+redistributing binaries, while a Worker switch is a deploy. Add new providers
+as adapters in `proxy/worker.js`, covered by `proxy/worker.test.mjs`.
 
 - Model: `claude-opus-5`
 - Headers: `x-api-key`, `anthropic-version: 2023-06-01`, `content-type: application/json`
@@ -125,12 +137,21 @@ makes search silently return stale results rather than fail.
   `WindowEvent::Focused` never fires there. Blur-dismissal lives in the panel
   delegate (`launcher.rs`); the `on_window_event` handler in `lib.rs` is for
   Windows. The crate is pinned by rev in Cargo.toml — bump deliberately.
+- **The structured-output JSON Schema must match `ContextBody`'s serde names
+  exactly** (`ai.rs`). A mismatch is not an error — the model returns valid
+  JSON, serde fills defaults, and the context saves silently empty. Pinned by
+  `schema_field_names_match_the_struct`.
+- **`stop_reason: "refusal"` arrives as HTTP 200.** Check it before reading
+  `content`, or a declined request looks like an empty response.
+- **Never hold the DB `Mutex` across an `.await`.** The AI commands take the
+  lock, drop it, make the request, then re-take it — holding it would block
+  every other command for the duration of the API call.
 - **Launcher dismissal needs a blur grace period** (400ms, `launcher.rs`):
   a resign-key/blur arriving right after show() is part of the show
   transition; hiding on it makes the launcher flash open and vanish.
 
 ## Immediate next task
 
-Milestone 3 (AI generation) — see PRD §11. Also outstanding from Milestone 1:
-user-configurable + persisted shortcut, window-show latency measurement, and a
-first real Windows test pass.
+Deploy the proxy (`proxy/README.md`) and set `BATON_API_BASE` — generation
+cannot work until then. After that: PRD §14b (raw conversation storage), the
+configurable shortcut, and a first Windows test pass.
