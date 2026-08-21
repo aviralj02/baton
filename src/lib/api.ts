@@ -34,3 +34,15 @@ export const renderContext = (id: string) => invoke<string>("render_context", { 
 export const hideLauncher = () => invoke<void>("hide_launcher");
 
 export const openMainWindow = () => invoke<void>("open_main_window");
+
+/** Extract a structured context from a pasted conversation, and save it. */
+export const createFromConversation = (name: string, conversation: string) =>
+  invoke<Context>("create_context_from_conversation", { name, conversation });
+
+/** Merge a newer conversation into an existing context. */
+export const updateFromConversation = (id: string, conversation: string) =>
+  invoke<Context>("update_context_from_conversation", { id, conversation });
+
+/** Write a continuation prompt for the next model, and copy it. */
+export const generateHandoff = (id: string) =>
+  invoke<string>("generate_handoff", { id });

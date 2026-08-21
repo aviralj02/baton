@@ -7,6 +7,8 @@ export function ContextDetail({
   context,
   onBack,
   onCopy,
+  onUpdate,
+  onHandoff,
   onSaved,
   onDeleted,
   onError,
@@ -14,6 +16,11 @@ export function ContextDetail({
   context: Context;
   onBack: () => void;
   onCopy: () => void;
+  /** Paste a newer conversation and re-derive (PRD §9). Optional: the browser
+   *  window offers it, but a caller may omit it. */
+  onUpdate?: () => void;
+  /** Rewrite the context as a prompt for the next model (PRD §8). */
+  onHandoff?: () => void;
   onSaved: (c: Context) => void;
   onDeleted: () => void;
   onError: (msg: string) => void;
@@ -65,6 +72,9 @@ export function ContextDetail({
         e.preventDefault();
         if (editing) void save();
         else onCopy();
+      } else if (k === "u" && !typing && onUpdate) {
+        e.preventDefault();
+        onUpdate();
       } else if (k === "e" && !typing) {
         e.preventDefault();
         setEditing((v) => !v);
@@ -78,7 +88,7 @@ export function ContextDetail({
     return () => window.removeEventListener("keydown", onKey, true);
     // `save` closes over draft/name, so it must be in the dep list or the
     // handler would persist a stale draft.
-  }, [editing, draft, name, onCopy, context.id]);
+  }, [editing, draft, name, onCopy, onUpdate, context.id]);
 
   return (
     <div className="flex h-full flex-col">
@@ -151,6 +161,22 @@ export function ContextDetail({
             <button onClick={() => setEditing(true)} className="hover:text-neutral-600 dark:hover:text-neutral-200">
               {MOD_LABEL}E Edit
             </button>
+            {onHandoff && (
+              <button
+                onClick={onHandoff}
+                className="hover:text-neutral-600 dark:hover:text-neutral-200"
+              >
+                Handoff
+              </button>
+            )}
+            {onUpdate && (
+              <button
+                onClick={onUpdate}
+                className="hover:text-neutral-600 dark:hover:text-neutral-200"
+              >
+                {MOD_LABEL}U Update
+              </button>
+            )}
             <button
               onClick={() => setConfirmDelete(true)}
               className="ml-auto hover:text-red-500"

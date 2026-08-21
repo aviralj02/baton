@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import * as api from "./lib/api";
 import { relativeTime } from "./Launcher";
 import { ContextDetail } from "./components/ContextDetail";
+import { PasteConversation } from "./components/PasteConversation";
 import { Logo } from "./components/Logo";
 import type { Context, ContextSummary } from "./types";
 
@@ -11,6 +12,7 @@ export default function Browser() {
   const [query, setQuery] = useState("");
   const [toast, setToast] = useState<string | null>(null);
   const [confirmWipe, setConfirmWipe] = useState(false);
+  const [pasting, setPasting] = useState<null | { kind: "create" } | { kind: "update"; id: string; name: string }>(null);
 
   const reload = useCallback(async (q: string) => {
     try {
@@ -57,7 +59,7 @@ export default function Browser() {
         className="flex items-center gap-3 border-b border-black/10 px-4 py-2.5 dark:border-white/10"
       >
         {/* pl-16 clears the macOS traffic lights on a decorated window. */}
-        <span className="flex items-center gap-2 pl-16 text-sm font-medium">
+        <span className="flex items-center gap-2 text-sm font-medium">
           <Logo size={17} />
           Baton
         </span>
@@ -69,9 +71,15 @@ export default function Browser() {
         />
         <button
           onClick={() => void create()}
-          className="ml-auto rounded-md bg-neutral-900 px-2.5 py-1 text-xs font-medium text-white hover:bg-neutral-700 dark:bg-white dark:text-neutral-900 dark:hover:bg-neutral-200"
+          className="ml-auto rounded-md px-2.5 py-1 text-xs hover:bg-black/5 dark:text-neutral-300 dark:hover:bg-white/10"
         >
-          + New
+          + Empty
+        </button>
+        <button
+          onClick={() => setPasting({ kind: "create" })}
+          className="rounded-md bg-neutral-900 px-2.5 py-1 text-xs font-medium text-white hover:bg-neutral-700 dark:bg-white dark:text-neutral-900 dark:hover:bg-neutral-200"
+        >
+          Paste conversation
         </button>
       </header>
 
@@ -143,10 +151,34 @@ export default function Browser() {
         </aside>
 
         <main className="min-w-0 flex-1">
-          {selected ? (
+          {pasting ? (
+            <PasteConversation
+              mode={pasting}
+              onDone={async (c) => {
+                setPasting(null);
+                setSelected(c);
+                await reload(query);
+                setToast("Context generated");
+              }}
+              onCancel={() => setPasting(null)}
+              onError={setToast}
+            />
+          ) : selected ? (
             <ContextDetail
               context={selected}
               onBack={() => setSelected(null)}
+              onUpdate={() =>
+                setPasting({ kind: "update", id: selected.id, name: selected.name })
+              }
+              onHandoff={async () => {
+                try {
+                  setToast("Writing handoff…");
+                  await api.generateHandoff(selected.id);
+                  setToast("Handoff copied");
+                } catch (e) {
+                  setToast(String(e));
+                }
+              }}
               onCopy={async () => {
                 try {
                   await api.copyContext(selected.id);

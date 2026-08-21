@@ -4,8 +4,13 @@ import * as api from "./lib/api";
 import { MOD_LABEL, ENTER_LABEL, hasMod } from "./lib/platform";
 import type { Context, ContextSummary } from "./types";
 import { ContextDetail } from "./components/ContextDetail";
+import { PasteConversation } from "./components/PasteConversation";
 
-type Mode = { kind: "list" } | { kind: "detail"; id: string } | { kind: "create" };
+type Mode =
+  | { kind: "list" }
+  | { kind: "detail"; id: string }
+  | { kind: "paste"; name: string }
+  | { kind: "update"; id: string; name: string };
 
 export default function Launcher() {
   const [query, setQuery] = useState("");
@@ -81,7 +86,8 @@ export default function Launcher() {
     }
   };
 
-  const create = async (name: string) => {
+  /// Manual creation, kept for a context you want to write yourself.
+  const createBlank = async (name: string) => {
     try {
       const ctx = await api.saveContext({ name });
       setQuery("");
@@ -93,6 +99,32 @@ export default function Launcher() {
     }
   };
 
+  const afterGenerate = async (ctx: Context) => {
+    setQuery("");
+    await reload("");
+    setDetail(ctx);
+    setMode({ kind: "detail", id: ctx.id });
+    setToast("Context generated");
+  };
+
+  if (mode.kind === "paste" || mode.kind === "update") {
+    return (
+      <Shell toast={toast}>
+        <PasteConversation
+          mode={
+            mode.kind === "paste"
+              ? { kind: "create" }
+              : { kind: "update", id: mode.id, name: mode.name }
+          }
+          initialName={mode.kind === "paste" ? mode.name : undefined}
+          onDone={afterGenerate}
+          onCancel={() => setMode({ kind: "list" })}
+          onError={setToast}
+        />
+      </Shell>
+    );
+  }
+
   if (mode.kind === "detail" && detail) {
     return (
       <Shell toast={toast}>
@@ -103,6 +135,19 @@ export default function Launcher() {
             setDetail(null);
           }}
           onCopy={() => copy(detail.id)}
+          onUpdate={() =>
+            setMode({ kind: "update", id: detail.id, name: detail.name })
+          }
+          onHandoff={async () => {
+            try {
+              setToast("Writing handoff…");
+              await api.generateHandoff(detail.id);
+              setToast("Handoff copied");
+              setTimeout(dismiss, 350);
+            } catch (e) {
+              setToast(String(e));
+            }
+          }}
           onSaved={async (c) => {
             setDetail(c);
             await reload(query);
@@ -154,13 +199,18 @@ export default function Launcher() {
             </div>
           )}
 
-          {trimmed && !exactExists && (
-            <Group heading="Create">
-              <Item onSelect={() => void create(trimmed)}>
-                Create context <span className="text-neutral-400">“{trimmed}”</span>
+          <Group heading="Create">
+            <Item onSelect={() => setMode({ kind: "paste", name: trimmed })}>
+              Paste a conversation
+              {trimmed && <span className="text-neutral-400"> as “{trimmed}”</span>}
+            </Item>
+            {trimmed && !exactExists && (
+              <Item onSelect={() => void createBlank(trimmed)}>
+                Create empty context{" "}
+                <span className="text-neutral-400">“{trimmed}”</span>
               </Item>
-            </Group>
-          )}
+            )}
+          </Group>
 
           {rows.length > 0 && (
             <Group heading={trimmed ? "Results" : "Recent"}>
