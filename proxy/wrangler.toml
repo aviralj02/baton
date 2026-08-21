@@ -1,0 +1,17 @@
+name = "baton-proxy"
+main = "worker.js"
+compatibility_date = "2026-08-21"
+
+[vars]
+# Which upstream to translate to: "gemini" or "anthropic".
+PROVIDER = "gemini"
+# Optional model override. Defaults: gemini-3.7-flash / claude-opus-5.
+# MODEL = "gemini-3.1-pro-preview"
+
+# Per-device daily rate limiting. Create with:
+#   npx wrangler kv namespace create RATE_LIMIT
+# then paste the printed id below and uncomment. The Worker runs without it,
+# but stops enforcing the daily cap — i.e. your spend becomes unbounded.
+# [[kv_namespaces]]
+# binding = "RATE_LIMIT"
+# id = "paste-the-id-here"
