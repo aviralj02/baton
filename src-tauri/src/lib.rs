@@ -1,3 +1,4 @@
+mod ai;
 mod commands;
 mod context;
 mod db;
@@ -5,6 +6,25 @@ mod launcher;
 mod tray;
 
 pub const BROWSER_WINDOW: &str = "browser";
+
+/// Stable per-install id, sent with generation requests so the proxy can
+/// rate-limit without accounts. Trivially spoofable — it is friction against
+/// casual abuse, not authentication.
+pub fn device_id(app: &tauri::AppHandle) -> String {
+    let Ok(dir) = app.path().app_data_dir() else {
+        return "unknown".to_string();
+    };
+    let path = dir.join("device-id");
+    if let Ok(existing) = std::fs::read_to_string(&path) {
+        let existing = existing.trim().to_string();
+        if !existing.is_empty() {
+            return existing;
+        }
+    }
+    let fresh = uuid::Uuid::new_v4().to_string();
+    let _ = std::fs::write(&path, &fresh);
+    fresh
+}
 
 use tauri::Manager;
 use tauri_plugin_global_shortcut::{Code, Modifiers, Shortcut, ShortcutState};
@@ -107,6 +127,10 @@ pub fn run() {
             commands::render_context,
             commands::hide_launcher,
             commands::open_main_window,
+            commands::create_context_from_conversation,
+            commands::update_context_from_conversation,
+            commands::generate_handoff,
+            commands::ai_endpoint,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

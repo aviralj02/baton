@@ -178,6 +178,27 @@ pub fn save(conn: &Connection, ctx: &Context) -> Result<Context> {
     get(conn, &ctx.id)
 }
 
+/// Record the raw conversation an extraction came from (PRD §6 `sources`).
+///
+/// Kept so a context can be re-extracted with a better prompt later without
+/// asking the user to go find the conversation again. Note this is the one
+/// place Baton stores unfiltered chat text — see PRD §16 on encrypting or
+/// expiring it, since real conversations contain credentials.
+pub fn add_source(conn: &Connection, context_id: &str, kind: &str, content: &str) -> Result<()> {
+    conn.execute(
+        "INSERT INTO sources (id, context_id, type, content, created_at)
+         VALUES (?1, ?2, ?3, ?4, ?5)",
+        params![
+            uuid::Uuid::new_v4().to_string(),
+            context_id,
+            kind,
+            content,
+            now()
+        ],
+    )?;
+    Ok(())
+}
+
 pub fn delete(conn: &Connection, id: &str) -> Result<()> {
     let n = conn.execute("DELETE FROM contexts WHERE id = ?1", params![id])?;
     if n == 0 {
@@ -339,6 +360,22 @@ mod tests {
             .query_row("SELECT COUNT(*) FROM sources", [], |r| r.get(0))
             .unwrap();
         assert_eq!(n, 0, "orphaned source rows");
+    }
+
+    #[test]
+    fn add_source_records_raw_text_against_the_context() {
+        let c = mem();
+        save(&c, &ctx("a", "Auth", "g")).unwrap();
+        add_source(&c, "a", "conversation", "raw chat text").unwrap();
+        let (kind, body): (String, String) = c
+            .query_row(
+                "SELECT type, content FROM sources WHERE context_id = 'a'",
+                [],
+                |r| Ok((r.get(0)?, r.get(1)?)),
+            )
+            .unwrap();
+        assert_eq!(kind, "conversation");
+        assert_eq!(body, "raw chat text");
     }
 
     #[test]
