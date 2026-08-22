@@ -164,6 +164,7 @@ pub fn run() {
             commands::page_backlinks,
             commands::broken_links,
             commands::read_page,
+            commands::copy_page,
             commands::create_context_from_conversation,
             commands::update_context_from_conversation,
             commands::generate_handoff,

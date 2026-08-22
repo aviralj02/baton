@@ -9,9 +9,14 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::OnceLock;
 use std::time::Instant;
 
-use tauri::{AppHandle, Manager, WebviewWindow};
+use tauri::{AppHandle, Emitter, Manager, WebviewWindow};
 
 pub const MAIN_WINDOW: &str = "main";
+
+/// Emitted on every show. The window is created once and never remounts, so
+/// this is the webview's only signal that a fresh summon happened, and it is
+/// what lets the launcher re-sweep the wiki before the user starts typing.
+pub const SHOWN_EVENT: &str = "launcher-shown";
 
 static LAST_SHOWN_MS: AtomicU64 = AtomicU64::new(0);
 static START: OnceLock<Instant> = OnceLock::new();
@@ -66,6 +71,7 @@ fn apply_background_effect(app: &AppHandle) {
 
 pub fn show(app: &AppHandle) {
     LAST_SHOWN_MS.store(now_ms(), Ordering::Relaxed);
+    let _ = app.emit(SHOWN_EVENT, ());
 
     #[cfg(target_os = "macos")]
     macos::show(app);

@@ -147,9 +147,27 @@ pub fn broken_links(db: State<'_, Db>) -> Result<Vec<db::BrokenLink>> {
 #[tauri::command]
 pub fn read_page(app: tauri::AppHandle, id: String) -> Result<wiki::Page> {
     let root = crate::wiki_root(&app).map_err(db::DbError::Path)?;
-    // Never join an id from the webview onto the root without this check.
-    let path = wiki::page_path(&root, &id).ok_or_else(|| db::DbError::NotFound(id.clone()))?;
-    Ok(wiki::read(&root, &path)?)
+    Ok(wiki::read(&root, &page_file(&root, &id)?)?)
+}
+
+/// Put a page on the clipboard and return it. The frontmatter is left behind,
+/// because it is bookkeeping for the wiki rather than context for a model.
+///
+/// This is the launcher's decisive action and the reason the app exists.
+#[tauri::command]
+pub fn copy_page(app: tauri::AppHandle, id: String) -> Result<String> {
+    let root = crate::wiki_root(&app).map_err(db::DbError::Path)?;
+    let markdown = wiki::read(&root, &page_file(&root, &id)?)?.body;
+    app.clipboard()
+        .write_text(markdown.clone())
+        .map_err(|e| db::DbError::Clipboard(e.to_string()))?;
+    Ok(markdown)
+}
+
+/// Resolve a page id that arrived from the webview. Never join one onto the
+/// root without this: `page_path` refuses anything that climbs out.
+fn page_file(root: &std::path::Path, id: &str) -> Result<std::path::PathBuf> {
+    wiki::page_path(root, id).ok_or_else(|| db::DbError::NotFound(id.to_string()))
 }
 
 // ------------------------------------------------------------------ AI
