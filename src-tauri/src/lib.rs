@@ -4,8 +4,20 @@ mod context;
 mod db;
 mod launcher;
 mod tray;
+/// Public so the reader half of the wiki can be exercised before any command
+/// wires it up.
+pub mod wiki;
 
 pub const BROWSER_WINDOW: &str = "browser";
+
+/// The wiki root. One central folder covering every project, by decision, so
+/// this is neither per-repository nor configurable yet.
+pub fn wiki_root(app: &tauri::AppHandle) -> std::result::Result<std::path::PathBuf, String> {
+    app.path()
+        .home_dir()
+        .map(|home| home.join("Baton"))
+        .map_err(|e| format!("no home directory: {e}"))
+}
 
 /// Stable per-install id, sent with generation requests so the proxy can
 /// rate-limit without accounts. Trivially spoofable — it is friction against
@@ -98,6 +110,25 @@ pub fn run() {
             let conn = db::open(&dir.join("baton.sqlite3"))?;
             app.manage(db::Db(std::sync::Mutex::new(conn)));
 
+            // The first sweep is disk work, so it stays off the startup path.
+            // The shortcut and the tray must be live immediately, and a missing
+            // ~/Baton is a degraded feature rather than a failed launch.
+            let handle = app.handle().clone();
+            tauri::async_runtime::spawn_blocking(move || {
+                let swept = wiki_root(&handle).and_then(|root| {
+                    let db = handle.state::<db::Db>();
+                    db::sync(&db, &root).map_err(|e| e.to_string())
+                });
+                match swept {
+                    Ok(report) => {
+                        for error in &report.errors {
+                            eprintln!("[baton] wiki page skipped: {error}");
+                        }
+                    }
+                    Err(e) => eprintln!("[baton] wiki sync failed: {e}"),
+                }
+            });
+
             Ok(())
         })
         .on_window_event(|win, event| {
@@ -127,6 +158,12 @@ pub fn run() {
             commands::render_context,
             commands::hide_launcher,
             commands::open_main_window,
+            commands::sync_wiki,
+            commands::list_pages,
+            commands::search_pages,
+            commands::page_backlinks,
+            commands::broken_links,
+            commands::read_page,
             commands::create_context_from_conversation,
             commands::update_context_from_conversation,
             commands::generate_handoff,

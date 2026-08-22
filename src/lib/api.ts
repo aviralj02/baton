@@ -6,7 +6,15 @@
  * src-tauri/src/commands.rs, instead of drifting across the component tree.
  */
 import { invoke } from "@tauri-apps/api/core";
-import type { Context, ContextBody, ContextSummary } from "../types";
+import type {
+  BrokenLink,
+  Context,
+  ContextBody,
+  ContextSummary,
+  IndexReport,
+  Page,
+  PageHit,
+} from "../types";
 
 export const listContexts = () => invoke<ContextSummary[]>("list_contexts");
 
@@ -34,6 +42,29 @@ export const renderContext = (id: string) => invoke<string>("render_context", { 
 export const hideLauncher = () => invoke<void>("hide_launcher");
 
 export const openMainWindow = () => invoke<void>("open_main_window");
+
+// ----------------------------------------------------------------- the wiki
+
+/**
+ * Bring the index in line with the files under ~/Baton. Cheap to call: the
+ * sweep skips every file whose mtime and size match the indexed row.
+ */
+export const syncWiki = () => invoke<IndexReport>("sync_wiki");
+
+export const listPages = () => invoke<PageHit[]>("list_pages");
+
+export const searchPages = (query: string) =>
+  invoke<PageHit[]>("search_pages", { query });
+
+/** Pages that link to this one. */
+export const pageBacklinks = (id: string) =>
+  invoke<PageHit[]>("page_backlinks", { id });
+
+/** Links that name a page which does not exist. */
+export const brokenLinks = () => invoke<BrokenLink[]>("broken_links");
+
+/** The page itself, read from the file rather than from the index. */
+export const readPage = (id: string) => invoke<Page>("read_page", { id });
 
 /** Extract a structured context from a pasted conversation, and save it. */
 export const createFromConversation = (name: string, conversation: string) =>

@@ -6,6 +6,7 @@ use tauri_plugin_clipboard_manager::ClipboardExt;
 use crate::ai::{self, AiClient};
 use crate::context::{Context, ContextBody, ContextSummary};
 use crate::db::{self, Db, Result};
+use crate::wiki;
 
 fn with_conn<T>(db: &Db, f: impl FnOnce(&rusqlite::Connection) -> Result<T>) -> Result<T> {
     // A poisoned lock means another command panicked mid-write. Recover the
@@ -103,6 +104,52 @@ pub fn open_main_window(app: tauri::AppHandle) -> std::result::Result<(), String
     .map_err(|e| e.to_string())?;
 
     Ok(())
+}
+
+// ---------------------------------------------------------------- the wiki
+//
+// The markdown files under ~/Baton are the source of truth. These commands read
+// them and the index over them. None of them writes a page: pages are written
+// by the agent that did the work, through the closing command.
+
+/// Bring the index in line with the files. Cheap to call repeatedly, because
+/// the sweep skips every file whose mtime and size match the indexed row.
+#[tauri::command]
+pub fn sync_wiki(app: tauri::AppHandle, db: State<'_, Db>) -> Result<db::IndexReport> {
+    let root = crate::wiki_root(&app).map_err(db::DbError::Path)?;
+    db::sync(&db, &root)
+}
+
+#[tauri::command]
+pub fn list_pages(db: State<'_, Db>) -> Result<Vec<db::PageHit>> {
+    with_conn(&db, db::list_pages)
+}
+
+#[tauri::command]
+pub fn search_pages(db: State<'_, Db>, query: String) -> Result<Vec<db::PageHit>> {
+    with_conn(&db, |c| db::search_pages(c, &query))
+}
+
+/// Pages that link to this one.
+#[tauri::command]
+pub fn page_backlinks(db: State<'_, Db>, id: String) -> Result<Vec<db::PageHit>> {
+    with_conn(&db, |c| db::backlinks(c, &id))
+}
+
+/// Links that name a page which does not exist. The wiki's own lint.
+#[tauri::command]
+pub fn broken_links(db: State<'_, Db>) -> Result<Vec<db::BrokenLink>> {
+    with_conn(&db, db::broken_links)
+}
+
+/// One page, read from the file rather than from the index. The index is for
+/// finding a page, the file is what a reader gets, so the two cannot disagree.
+#[tauri::command]
+pub fn read_page(app: tauri::AppHandle, id: String) -> Result<wiki::Page> {
+    let root = crate::wiki_root(&app).map_err(db::DbError::Path)?;
+    // Never join an id from the webview onto the root without this check.
+    let path = wiki::page_path(&root, &id).ok_or_else(|| db::DbError::NotFound(id.clone()))?;
+    Ok(wiki::read(&root, &path)?)
 }
 
 // ------------------------------------------------------------------ AI
