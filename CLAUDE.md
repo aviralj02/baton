@@ -1,8 +1,24 @@
 # Baton — notes for AI coding sessions
 
-**Read `PRD.md` first.** It is the source of truth for what this product is,
-what is deliberately excluded, and what the next milestone is. This file only
-covers how to work in the repo.
+**Read `docs/PLAN.md` first.** It is the live record of the phase plan, the
+decision log, and what is next. **Then read `PRD.md`** for the original product
+spec, noting that the wiki direction agreed on 2026-08-22 supersedes parts of it
+until Phase 4 reconciles the two. `baton-the-wiki.html` at the repo root is the
+vision document behind that direction. This file only covers how to work in the
+repo.
+
+## Docs layout
+
+| File | Holds |
+|---|---|
+| `docs/PLAN.md` | Phases, task checkboxes, decision log, open questions. **Update in place as work lands.** Never start a parallel status doc. |
+| `PRD.md` | The original product spec and milestone history. Partly superseded, see above. |
+| `baton-the-wiki.html` | The current vision: what the product is and one worked example. Standalone HTML, open it in a browser. |
+| `CLAUDE.md` | This file. Working rules, architecture constraints, gotchas. |
+
+`docs/` holds long-lived planning and design documents only. It is not for
+generated output, notes for a single session, or anything a reader would not
+expect to still be true next month.
 
 ## What this is
 
@@ -18,7 +34,7 @@ them distinct in code and copy.
 ## Commands
 
 ```bash
-source "$HOME/.cargo/env"   # cargo was installed via rustup; may not be on PATH
+source "$HOME/.cargo/env"   # only if cargo is not on PATH; rustup normally adds it
 pnpm install
 pnpm tauri dev              # run the app
 pnpm build                  # frontend typecheck + build
