@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Command } from "cmdk";
+import { openPath } from "@tauri-apps/plugin-opener";
 import * as api from "./lib/api";
 import { MOD_LABEL, ENTER_LABEL, hasMod } from "./lib/platform";
-import type { Context, ContextSummary } from "./types";
+import type { Context, PageHit } from "./types";
 import { ContextDetail } from "./components/ContextDetail";
 import { PasteConversation } from "./components/PasteConversation";
 
@@ -14,15 +15,17 @@ type Mode =
 
 export default function Launcher() {
   const [query, setQuery] = useState("");
-  const [rows, setRows] = useState<ContextSummary[]>([]);
+  const [rows, setRows] = useState<PageHit[]>([]);
+  const [selected, setSelected] = useState("");
   const [mode, setMode] = useState<Mode>({ kind: "list" });
   const [detail, setDetail] = useState<Context | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const queryRef = useRef(query);
 
   const reload = useCallback(async (q: string) => {
     try {
-      setRows(q.trim() ? await api.searchContexts(q) : await api.listContexts());
+      setRows(q.trim() ? await api.searchPages(q) : await api.listPages());
     } catch (e) {
       setToast(String(e));
     }
@@ -34,6 +37,28 @@ export default function Launcher() {
     const t = setTimeout(() => void reload(query), 80);
     return () => clearTimeout(t);
   }, [query, reload]);
+
+  useEffect(() => {
+    queryRef.current = query;
+  }, [query]);
+
+  // The wiki is edited outside this app, by an agent running `/baton` in a
+  // terminal or by hand in an editor. Re-sweeping on every summon is what keeps
+  // the index from lagging behind the files. The sweep skips anything whose
+  // mtime and size are unchanged, so the common case costs almost nothing.
+  useEffect(() => {
+    const unlisten = api.onLauncherShown(() => {
+      void (async () => {
+        try {
+          await api.syncWiki();
+        } catch (e) {
+          setToast(String(e));
+        }
+        await reload(queryRef.current);
+      })();
+    });
+    return () => void unlisten.then((off) => off());
+  }, [reload]);
 
   const dismiss = useCallback(() => {
     setQuery("");
@@ -66,20 +91,32 @@ export default function Launcher() {
     }
   }, [toast]);
 
-  const open = async (id: string) => {
+  const copyPage = async (id: string) => {
     try {
-      setDetail(await api.getContext(id));
-      setMode({ kind: "detail", id });
+      await api.copyPage(id);
+      setToast("Copied to clipboard");
+      // The whole point is pasting elsewhere, so get out of the way.
+      setTimeout(dismiss, 350);
     } catch (e) {
       setToast(String(e));
     }
   };
 
-  const copy = async (id: string) => {
+  /// Hand the file to whatever owns .md on this machine, which is the editor
+  /// the user already writes these pages in.
+  const openFile = async (hit: PageHit) => {
+    try {
+      await openPath(hit.path);
+      dismiss();
+    } catch (e) {
+      setToast(String(e));
+    }
+  };
+
+  const copyContext = async (id: string) => {
     try {
       await api.copyContext(id);
       setToast("Copied to clipboard");
-      // The whole point is pasting elsewhere, so get out of the way.
       setTimeout(dismiss, 350);
     } catch (e) {
       setToast(String(e));
@@ -134,7 +171,7 @@ export default function Launcher() {
             setMode({ kind: "list" });
             setDetail(null);
           }}
-          onCopy={() => copy(detail.id)}
+          onCopy={() => copyContext(detail.id)}
           onUpdate={() =>
             setMode({ kind: "update", id: detail.id, name: detail.name })
           }
@@ -166,18 +203,21 @@ export default function Launcher() {
   }
 
   const trimmed = query.trim();
-  const exactExists = rows.some((r) => r.name.toLowerCase() === trimmed.toLowerCase());
 
   return (
     <Shell toast={toast}>
       <Command
         shouldFilter={false} // ranking comes from SQLite bm25, not cmdk
+        value={selected}
+        onValueChange={setSelected}
         className="flex h-full flex-col"
         onKeyDown={(e) => {
           if (hasMod(e) && e.key === "Enter") {
             e.preventDefault();
-            const id = rows[0]?.id;
-            if (id) void copy(id);
+            // cmdk normalises the value it reports, so match case-insensitively.
+            // Rows that are not pages match nothing and fall through.
+            const hit = rows.find((r) => r.id.toLowerCase() === selected.toLowerCase());
+            if (hit) void openFile(hit);
           }
         }}
       >
@@ -187,16 +227,26 @@ export default function Launcher() {
             autoFocus
             value={query}
             onValueChange={setQuery}
-            placeholder="Search or create context..."
-            className="w-full bg-transparent px-4 py-3.5 text-[15px] outline-none placeholder:text-neutral-400 dark:text-neutral-100"
+            placeholder="Search your wiki..."
+            className="w-full bg-transparent px-4 py-3.5 text-[15px] outline-none placeholder:text-[15px] placeholder:text-neutral-400 dark:text-neutral-100"
           />
         </div>
 
         <Command.List className="flex-1 overflow-y-auto p-2">
-          {rows.length === 0 && !trimmed && (
+          {rows.length === 0 && (
             <div className="px-3 py-6 text-center text-sm text-neutral-400">
-              No contexts yet. Type a name to create one.
+              {trimmed
+                ? `Nothing matches “${trimmed}”.`
+                : "No pages yet. Run /baton at the end of a session to write one."}
             </div>
+          )}
+
+          {rows.length > 0 && (
+            <Group heading={trimmed ? "Results" : "Recent"}>
+              {rows.map((r) => (
+                <PageItem key={r.id} hit={r} onSelect={() => void copyPage(r.id)} />
+              ))}
+            </Group>
           )}
 
           <Group heading="Create">
@@ -204,26 +254,13 @@ export default function Launcher() {
               Paste a conversation
               {trimmed && <span className="text-neutral-400"> as “{trimmed}”</span>}
             </Item>
-            {trimmed && !exactExists && (
+            {trimmed && (
               <Item onSelect={() => void createBlank(trimmed)}>
                 Create empty context{" "}
                 <span className="text-neutral-400">“{trimmed}”</span>
               </Item>
             )}
           </Group>
-
-          {rows.length > 0 && (
-            <Group heading={trimmed ? "Results" : "Recent"}>
-              {rows.map((r) => (
-                <Item key={r.id} onSelect={() => void open(r.id)}>
-                  <span className="truncate">{r.name}</span>
-                  <span className="ml-auto shrink-0 pl-3 text-xs text-neutral-400">
-                    {relativeTime(r.updatedAt)}
-                  </span>
-                </Item>
-              ))}
-            </Group>
-          )}
 
           <Group heading="Actions">
             <Item onSelect={() => void api.openMainWindow()}>Open main window</Item>
@@ -232,10 +269,10 @@ export default function Launcher() {
 
         <Footer>
           <span>↑↓ Navigate</span>
-          <span>{ENTER_LABEL} Open</span>
+          <span>{ENTER_LABEL} Copy page</span>
           <span className="ml-auto">
             {MOD_LABEL}
-            {ENTER_LABEL} Copy top result
+            {ENTER_LABEL} Open file
           </span>
         </Footer>
       </Command>
@@ -267,6 +304,9 @@ export function Group({ heading, children }: { heading: string; children: React.
   );
 }
 
+const ITEM_BASE =
+  "cursor-default rounded-md px-3 py-2 text-sm text-neutral-700 data-[selected=true]:bg-black/5 dark:text-neutral-200 dark:data-[selected=true]:bg-white/10";
+
 export function Item({
   children,
   onSelect,
@@ -275,11 +315,37 @@ export function Item({
   onSelect: () => void;
 }) {
   return (
-    <Command.Item
-      onSelect={onSelect}
-      className="flex cursor-default items-center gap-2 rounded-md px-3 py-2 text-sm text-neutral-700 data-[selected=true]:bg-black/5 dark:text-neutral-200 dark:data-[selected=true]:bg-white/10"
-    >
+    <Command.Item onSelect={onSelect} className={`${ITEM_BASE} flex items-center gap-2`}>
       {children}
+    </Command.Item>
+  );
+}
+
+/**
+ * A wiki page row. Two lines when the hit carries a snippet, one when it does
+ * not, so the browse list stays dense and a search result shows why it matched.
+ */
+function PageItem({ hit, onSelect }: { hit: PageHit; onSelect: () => void }) {
+  return (
+    <Command.Item
+      value={hit.id}
+      onSelect={onSelect}
+      className={`${ITEM_BASE} flex flex-col items-stretch gap-0.5`}
+    >
+      <div className="flex items-center gap-2">
+        <span className="truncate">{hit.title || hit.id}</span>
+        {/* The wiki keeps dead pages on purpose, so say which ones are dead. */}
+        {hit.status !== "current" && (
+          <span className="shrink-0 rounded bg-black/5 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-neutral-500 dark:bg-white/10 dark:text-neutral-400">
+            {hit.status}
+          </span>
+        )}
+        <span className="ml-auto shrink-0 pl-3 text-xs text-neutral-400">{hit.type}</span>
+        <span className="shrink-0 text-xs text-neutral-400">{relativeTime(hit.updated)}</span>
+      </div>
+      {hit.snippet && (
+        <span className="truncate text-xs text-neutral-400">{hit.snippet}</span>
+      )}
     </Command.Item>
   );
 }

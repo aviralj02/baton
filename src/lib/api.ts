@@ -6,6 +6,7 @@
  * src-tauri/src/commands.rs, instead of drifting across the component tree.
  */
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import type {
   BrokenLink,
   Context,
@@ -65,6 +66,16 @@ export const brokenLinks = () => invoke<BrokenLink[]>("broken_links");
 
 /** The page itself, read from the file rather than from the index. */
 export const readPage = (id: string) => invoke<Page>("read_page", { id });
+
+/** Puts the page on the clipboard, frontmatter stripped, and returns it. */
+export const copyPage = (id: string) => invoke<string>("copy_page", { id });
+
+/**
+ * Fires every time the launcher panel is shown. The window is created once at
+ * startup and only ever shown or hidden, so React never remounts and this is
+ * the only per-summon signal the webview gets.
+ */
+export const onLauncherShown = (fn: () => void) => listen("launcher-shown", fn);
 
 /** Extract a structured context from a pasted conversation, and save it. */
 export const createFromConversation = (name: string, conversation: string) =>
