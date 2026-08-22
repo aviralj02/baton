@@ -3,6 +3,7 @@ mod commands;
 mod context;
 mod db;
 mod launcher;
+pub mod primer;
 mod tray;
 /// Public so the reader half of the wiki can be exercised before any command
 /// wires it up.
@@ -165,6 +166,8 @@ pub fn run() {
             commands::broken_links,
             commands::read_page,
             commands::copy_page,
+            commands::build_primer,
+            commands::copy_primer,
             commands::create_context_from_conversation,
             commands::update_context_from_conversation,
             commands::generate_handoff,

@@ -6,6 +6,7 @@ use tauri_plugin_clipboard_manager::ClipboardExt;
 use crate::ai::{self, AiClient};
 use crate::context::{Context, ContextBody, ContextSummary};
 use crate::db::{self, Db, Result};
+use crate::primer;
 use crate::wiki;
 
 fn with_conn<T>(db: &Db, f: impl FnOnce(&rusqlite::Connection) -> Result<T>) -> Result<T> {
@@ -168,6 +169,49 @@ pub fn copy_page(app: tauri::AppHandle, id: String) -> Result<String> {
 /// root without this: `page_path` refuses anything that climbs out.
 fn page_file(root: &std::path::Path, id: &str) -> Result<std::path::PathBuf> {
     wiki::page_path(root, id).ok_or_else(|| db::DbError::NotFound(id.to_string()))
+}
+
+/// Roughly what fits in a paste without crowding out the conversation that
+/// follows it. Not yet configurable, and it should be once a wiki is big enough
+/// for the budget to bite.
+const PRIMER_BUDGET_TOKENS: usize = 12_000;
+
+/// Compose the brief without copying it, so the launcher can show the estimate
+/// before the user commits to a paste. Reading and parsing the whole wiki takes
+/// well under a millisecond, so this runs on every summon.
+#[tauri::command]
+pub fn build_primer(app: tauri::AppHandle, project: Option<String>) -> Result<primer::Primer> {
+    let root = crate::wiki_root(&app).map_err(db::DbError::Path)?;
+
+    // A page that will not parse is left out rather than failing the brief.
+    // The sweep is what reports it, and a broken page must not cost the user
+    // every other page.
+    let pages: Vec<wiki::Page> = wiki::walk(&root)?
+        .iter()
+        .filter_map(|path| wiki::read(&root, path).ok())
+        .collect();
+
+    let project = project
+        .filter(|p| !p.trim().is_empty())
+        .or_else(|| primer::most_recent_project(&pages))
+        .ok_or_else(|| db::DbError::NotFound("any project in the wiki".to_string()))?;
+
+    Ok(primer::assemble(
+        &pages,
+        &project,
+        PRIMER_BUDGET_TOKENS,
+        chrono::Utc::now().date_naive(),
+    ))
+}
+
+/// The launcher's primary action: the whole project brief on the clipboard.
+#[tauri::command]
+pub fn copy_primer(app: tauri::AppHandle, project: Option<String>) -> Result<primer::Primer> {
+    let primer = build_primer(app.clone(), project)?;
+    app.clipboard()
+        .write_text(primer.text.clone())
+        .map_err(|e| db::DbError::Clipboard(e.to_string()))?;
+    Ok(primer)
 }
 
 // ------------------------------------------------------------------ AI
