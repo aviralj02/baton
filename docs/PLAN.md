@@ -66,6 +66,64 @@ certainly be a line in `~/Baton/AGENTS.md` rather than anything in the Rust.
 
 ---
 
+## The loop, in practice
+
+Carried over from the deleted vision doc, because it is the clearest statement of what
+the product is.
+
+**1. At the end of a session**, in any tool with the skill installed:
+
+```
+> /baton
+
+Project: baton   ~/Desktop/personal/baton   branch: main
+
+Proposed 3 edits to ~/Baton/
+
+  update     projects/baton/overview.md
+  create     projects/baton/decisions/files-are-truth.md
+  conflict   architecture.md says "content holds JSON"
+             this session decided files are the source of truth
+
+Accept?  [a] all   [e] one by one   [n] none
+```
+
+The `conflict` line is the one that matters. It is the wiki saying it already believed
+something else, which is the moment a knowledge base earns its keep.
+
+**2. Next session**, the hotkey offers the brief as its first row, already filtered to
+the project touched last. One keystroke copies something like this:
+
+```markdown
+# Baton, continuation context
+
+## Goal
+A local-first launcher that hands your context to any AI tool.
+
+## Next step
+Retire ai.rs and the nine contexts commands.
+
+## Decisions standing
+- Markdown files are the source of truth, SQLite is an index.
+- The closing command is how knowledge gets in.
+
+## Already tried, do not repeat
+- Embedding an API key in the binary. Recoverable with `strings`.
+
+## Stale, treat with care
+- architecture.md still describes JSON. Superseded 2026-08-22.
+```
+
+Not one page. Assembled from several, in priority order, with staleness carried inline
+so the next model knows what to distrust.
+
+**Positioning:** Raycast puts a command a keystroke away, this puts what you know a
+keystroke away. The differentiators are the corpus, the author and the substrate, never
+cross-platform, since Raycast has been on Windows since late 2025. Detail lives in
+`~/Baton/projects/baton/decisions/positioning-raycast-for-context`.
+
+---
+
 ## The shape, in one paragraph
 
 A central folder of markdown files at `~/Baton/` holds a wiki about every project.
