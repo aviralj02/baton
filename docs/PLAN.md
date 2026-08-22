@@ -3,11 +3,15 @@
 **This file is the living record of what is done and what is next.** Update it in
 place as work lands. Do not start a parallel status doc.
 
-- **Vision and rationale:** `baton-the-wiki.html` at the repo root. Read it once
-  before starting a phase.
+**This is the only design document.** `baton-the-wiki.html` was deleted on 2026-08-23.
+Its vision and worked example are folded in below, so nothing needs reading alongside
+this file.
+
 - **Product spec and history:** `PRD.md`. It still describes the pre-wiki design in
   places. Phase 4 reconciles it.
 - **Working rules and gotchas:** `CLAUDE.md`.
+- **The knowledge itself:** `~/Baton/`. `index.md` lists every page, `log.md` records
+  every ingest, `AGENTS.md` is the schema. Trust those over any list in this file.
 
 Status values: `todo`, `doing`, `done`, `blocked`, `dropped`.
 
@@ -15,36 +19,37 @@ Status values: `todo`, `doing`, `done`, `blocked`, `dropped`.
 
 ## Where we are
 
-**Phase 0 is underway, with one task left.** The seed ingest was judged on 2026-08-22
-and failed on coverage, not on page quality. The schema was repaired, a second ingest
-ran on 2026-08-23, and the wiki is now 19 pages passing a full check. See
-**Judged 2026-08-22** under Phase 0.
-
-What remains is the cold acceptance test. `~/Baton/.acceptance-test.md` is written and
-ready. Run it in a fresh window with none of the design conversation in context:
-
-```
-Read ~/Baton/.acceptance-test.md and follow it.
-```
-
-The wiki itself is the source of truth for what pages exist. Read `~/Baton/index.md`
-rather than trusting a list in this file. As of 2026-08-23 it holds 19 pages: 1
-project, 5 decisions, 3 open questions, 2 attempts, 3 components, 5 gotchas.
-`~/Baton/log.md` records every ingest.
+**The loop runs.** Schema, command, wiki, page reading, search, primer and launcher are
+all built. Phases 0 through 3 all landed inside two days, and the next real work is the
+prune in Phase 4.
 
 | Phase | What it delivers | Status |
 |---|---|---|
-| 0 | Validate the idea with no code | `doing`, one task left |
+| 0 | Validate the idea with no code | `done`, accepted untested |
 | 1 | The wiki store in Rust | `doing`, watcher outstanding |
-| 2 | The primer, and the launcher reading it | `doing`, essentially complete |
+| 2 | The primer, and the launcher reading it | `done` |
 | 3 | Lint checks, surfaced inline | `doing`, `broken_links` shipped |
-| 4 | Prune what the new design makes dead | `todo` |
+| 4 | Prune what the new design makes dead | `todo`, next |
 | 5 | MCP server | `todo` |
 | 6 | Optional backfill from old transcripts | `todo` |
 
-Phases 1 and 2 ran ahead of this file. They were reconciled against the code on
-2026-08-23, and several Phase 1 tasks turned out to be `dropped` by design rather than
+Phases 1 and 2 ran ahead of this file and were reconciled against the code on
+2026-08-23. Several Phase 1 tasks turned out to be `dropped` by design rather than
 pending. Read each phase for detail, and trust the code over this table.
+
+The wiki holds 19 pages as of 2026-08-23: 1 project, 5 decisions, 3 open questions, 2
+attempts, 3 components, 5 gotchas.
+
+### Phase 0 was accepted without its acceptance test
+
+Decided 2026-08-23. The cold test, pasting a brief into a fresh window to see whether
+it needs correcting, was skipped and the loop assumed to work.
+
+That is a defensible bet. The pages read well, and the primer's ordering is pinned by
+ten tests. But it is the one assumption nothing else covers, and the whole design rests
+on it. **If handoffs start feeling thin, look here first.** The fix would almost
+certainly be a line in `~/Baton/AGENTS.md` rather than anything in the Rust.
+`~/Baton/.acceptance-test.md` is still on disk if it is ever worth running.
 
 ### Verified state of the repo, 2026-08-23
 
@@ -96,7 +101,8 @@ hour to test.
 - [x] Run `/baton` at the end of a real session in this repo.
 - [x] Read every page it wrote. Note every edit you would have made. See
       **Judged 2026-08-22** below.
-- [ ] Run the acceptance test in a genuinely cold session.
+- [dropped] Run the acceptance test in a genuinely cold session. Skipped by decision on
+      2026-08-23. See **Phase 0 was accepted without its acceptance test** above.
 
 ### Seeded 2026-08-22
 
