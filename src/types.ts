@@ -94,6 +94,15 @@ export interface IndexReport {
   errors: string[];
 }
 
+export interface Primer {
+  project: string;
+  text: string;
+  /** Estimated, not measured. Shown so a budget can be judged before pasting. */
+  tokens: number;
+  pagesIncluded: number;
+  pagesDropped: number;
+}
+
 export interface BrokenLink {
   src: string;
   dst: string;

@@ -15,6 +15,7 @@ import type {
   IndexReport,
   Page,
   PageHit,
+  Primer,
 } from "../types";
 
 export const listContexts = () => invoke<ContextSummary[]>("list_contexts");
@@ -66,6 +67,17 @@ export const brokenLinks = () => invoke<BrokenLink[]>("broken_links");
 
 /** The page itself, read from the file rather than from the index. */
 export const readPage = (id: string) => invoke<Page>("read_page", { id });
+
+/**
+ * The whole project brief, composed from several pages. Cheap enough to rebuild
+ * on every summon, so the launcher can show the estimate before copying.
+ */
+export const buildPrimer = (project?: string) =>
+  invoke<Primer>("build_primer", { project: project ?? null });
+
+/** Puts the brief on the clipboard and returns it. */
+export const copyPrimer = (project?: string) =>
+  invoke<Primer>("copy_primer", { project: project ?? null });
 
 /** Puts the page on the clipboard, frontmatter stripped, and returns it. */
 export const copyPage = (id: string) => invoke<string>("copy_page", { id });

@@ -3,7 +3,7 @@ import { Command } from "cmdk";
 import { openPath } from "@tauri-apps/plugin-opener";
 import * as api from "./lib/api";
 import { MOD_LABEL, ENTER_LABEL, hasMod } from "./lib/platform";
-import type { Context, PageHit } from "./types";
+import type { Context, PageHit, Primer } from "./types";
 import { ContextDetail } from "./components/ContextDetail";
 import { PasteConversation } from "./components/PasteConversation";
 
@@ -20,6 +20,7 @@ export default function Launcher() {
   const [mode, setMode] = useState<Mode>({ kind: "list" });
   const [detail, setDetail] = useState<Context | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+  const [primer, setPrimer] = useState<Primer | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const queryRef = useRef(query);
 
@@ -30,6 +31,21 @@ export default function Launcher() {
       setToast(String(e));
     }
   }, []);
+
+  // Composing the brief is pure text work over the parsed files, so it is
+  // rebuilt rather than cached. A wiki with no pages has no primer, which is a
+  // normal state and not an error worth a toast.
+  const refreshPrimer = useCallback(async () => {
+    try {
+      setPrimer(await api.buildPrimer());
+    } catch {
+      setPrimer(null);
+    }
+  }, []);
+
+  useEffect(() => {
+    void refreshPrimer();
+  }, [refreshPrimer]);
 
   // Search runs in SQLite (FTS5), not in the client, so every keystroke is a
   // round trip. Debounced to keep typing smooth on large stores.
@@ -54,11 +70,11 @@ export default function Launcher() {
         } catch (e) {
           setToast(String(e));
         }
-        await reload(queryRef.current);
+        await Promise.all([reload(queryRef.current), refreshPrimer()]);
       })();
     });
     return () => void unlisten.then((off) => off());
-  }, [reload]);
+  }, [reload, refreshPrimer]);
 
   const dismiss = useCallback(() => {
     setQuery("");
@@ -90,6 +106,16 @@ export default function Launcher() {
       return () => clearTimeout(t);
     }
   }, [toast]);
+
+  const copyPrimer = async () => {
+    try {
+      const copied = await api.copyPrimer();
+      setToast(`${copied.project} context copied, ${copied.pagesIncluded} pages`);
+      setTimeout(dismiss, 350);
+    } catch (e) {
+      setToast(String(e));
+    }
+  };
 
   const copyPage = async (id: string) => {
     try {
@@ -233,6 +259,25 @@ export default function Launcher() {
         </div>
 
         <Command.List className="flex-1 overflow-y-auto p-2">
+          {/* The primary action, and the first thing selected. Hidden once the
+              user types, because then they are hunting one page and Enter must
+              belong to the top result rather than to the brief. */}
+          {primer && !trimmed && (
+            <Command.Item
+              value="primer"
+              onSelect={() => void copyPrimer()}
+              className={`${ITEM_BASE} mb-1 flex items-center gap-2`}
+            >
+              <span className="truncate font-medium">Copy {primer.project} context</span>
+              <span className="ml-auto shrink-0 pl-3 text-xs text-neutral-400">
+                {primer.pagesIncluded} pages
+              </span>
+              <span className="shrink-0 text-xs text-neutral-400">
+                ~{formatTokens(primer.tokens)}
+              </span>
+            </Command.Item>
+          )}
+
           {rows.length === 0 && (
             <div className="px-3 py-6 text-center text-sm text-neutral-400">
               {trimmed
@@ -269,7 +314,7 @@ export default function Launcher() {
 
         <Footer>
           <span>↑↓ Navigate</span>
-          <span>{ENTER_LABEL} Copy page</span>
+          <span>{ENTER_LABEL} Copy</span>
           <span className="ml-auto">
             {MOD_LABEL}
             {ENTER_LABEL} Open file
@@ -356,6 +401,11 @@ export function Footer({ children }: { children: React.ReactNode }) {
       {children}
     </div>
   );
+}
+
+/** Token counts are estimates, so show them rounded rather than precise. */
+function formatTokens(tokens: number): string {
+  return tokens < 1000 ? `${tokens} tokens` : `${(tokens / 1000).toFixed(1)}k tokens`;
 }
 
 /** Compact relative time for list rows; falls back to the raw value. */
