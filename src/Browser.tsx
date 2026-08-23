@@ -2,48 +2,29 @@ import { useCallback, useEffect, useState } from "react";
 import { openPath } from "@tauri-apps/plugin-opener";
 import * as api from "./lib/api";
 import { relativeTime } from "./Launcher";
-import { ContextDetail } from "./components/ContextDetail";
 import { PageDetail } from "./components/PageDetail";
 import { Setup, useSetupGate } from "./components/Setup";
-import { PasteConversation } from "./components/PasteConversation";
 import { Logo } from "./components/Logo";
 import { Dot } from "./components/Dot";
-import type { Context, ContextSummary, Page, PageHit } from "./types";
+import type { Page, PageHit } from "./types";
 
-/**
- * Pages are the source of truth and lead the sidebar. Contexts are the old
- * hand-written store, still listed while any exist, because Phase 1's migration
- * out to markdown has not run and they would otherwise be unreachable.
- */
-type Selection =
-  | { kind: "page"; page: Page; backlinks: PageHit[] }
-  | { kind: "context"; context: Context }
-  | null;
+/** Markdown files under ~/Baton are the only store; the index is derived. */
+type Selection = { kind: "page"; page: Page; backlinks: PageHit[] } | null;
 
 export default function Browser() {
   const [pages, setPages] = useState<PageHit[]>([]);
-  const [contexts, setContexts] = useState<ContextSummary[]>([]);
   const [selected, setSelected] = useState<Selection>(null);
   const [query, setQuery] = useState("");
   const [toast, setToast] = useState<string | null>(null);
-  const [confirmWipe, setConfirmWipe] = useState(false);
   // A fresh install has no pages and no way to write one; setup is the only
   // useful thing to show until the /baton command exists.
   const setup = useSetupGate();
   const [showSetup, setShowSetup] = useState(false);
-  const [pasting, setPasting] = useState<
-    null | { kind: "create" } | { kind: "update"; id: string; name: string }
-  >(null);
 
   const reload = useCallback(async (q: string) => {
     try {
       const trimmed = q.trim();
-      const [nextPages, nextContexts] = await Promise.all([
-        trimmed ? api.searchPages(trimmed) : api.listPages(),
-        trimmed ? api.searchContexts(trimmed) : api.listContexts(),
-      ]);
-      setPages(nextPages);
-      setContexts(nextContexts);
+      setPages(trimmed ? await api.searchPages(trimmed) : await api.listPages());
     } catch (e) {
       setToast(String(e));
     }
@@ -79,30 +60,7 @@ export default function Browser() {
     }
   }, []);
 
-  const openContext = async (id: string) => {
-    try {
-      setSelected({ kind: "context", context: await api.getContext(id) });
-    } catch (e) {
-      setToast(String(e));
-    }
-  };
-
-  const create = async () => {
-    try {
-      const context = await api.saveContext({ name: "Untitled context" });
-      await reload(query);
-      setSelected({ kind: "context", context });
-    } catch (e) {
-      setToast(String(e));
-    }
-  };
-
-  const selectedId =
-    selected?.kind === "page"
-      ? selected.page.id
-      : selected?.kind === "context"
-        ? selected.context.id
-        : null;
+  const selectedId = selected?.kind === "page" ? selected.page.id : null;
 
   if ((setup.needed || showSetup) && setup.status) {
     return (
@@ -147,23 +105,11 @@ export default function Browser() {
         >
           Refresh
         </button>
-        <button
-          onClick={() => void create()}
-          className="cursor-pointer rounded-md px-2.5 py-1 text-xs transition-all duration-150 hover:bg-black/5 active:scale-[0.98] dark:text-neutral-300 dark:hover:bg-white/10"
-        >
-          + Empty
-        </button>
-        <button
-          onClick={() => setPasting({ kind: "create" })}
-          className="cursor-pointer rounded-md bg-neutral-900 px-2.5 py-1 text-xs font-medium text-white transition-all duration-150 hover:bg-neutral-700 active:scale-[0.98] dark:bg-white dark:text-neutral-900 dark:hover:bg-neutral-200"
-        >
-          Paste conversation
-        </button>
       </header>
 
       <div className="flex min-h-0 flex-1">
         <aside className="w-60 shrink-0 overflow-y-auto border-r border-black/10 p-2 dark:border-white/10">
-          {pages.length === 0 && contexts.length === 0 && (
+          {pages.length === 0 && (
             <p className="px-2 py-4 text-xs text-neutral-400">
               {query.trim()
                 ? "No matches."
@@ -189,77 +135,10 @@ export default function Browser() {
             />
           ))}
 
-          {contexts.length > 0 && <SidebarHeading>Contexts</SidebarHeading>}
-          {contexts.map((row) => (
-            <SidebarRow
-              key={row.id}
-              active={selectedId === row.id}
-              onClick={() => void openContext(row.id)}
-              title={row.name}
-              meta={relativeTime(row.updatedAt)}
-              faded={false}
-            />
-          ))}
-
-          <div className="mt-4 border-t border-black/10 pt-3 dark:border-white/10">
-            {confirmWipe ? (
-              <div className="px-1">
-                <p className="text-[11px] text-neutral-500 dark:text-neutral-400">
-                  Delete every context and clear the search index? The markdown files in
-                  ~/Baton are not touched, and the index rebuilds from them.
-                </p>
-                <div className="mt-2 flex gap-2">
-                  <button
-                    onClick={async () => {
-                      try {
-                        await api.deleteAllData();
-                        setSelected(null);
-                        setConfirmWipe(false);
-                        await api.syncWiki();
-                        await reload(query);
-                        setToast("Local data deleted");
-                      } catch (e) {
-                        setToast(String(e));
-                      }
-                    }}
-                    className="cursor-pointer rounded bg-red-600 px-2 py-1 text-[11px] font-medium text-white transition-all duration-150 hover:bg-red-700 active:scale-[0.98]"
-                  >
-                    Delete all
-                  </button>
-                  <button
-                    onClick={() => setConfirmWipe(false)}
-                    className="cursor-pointer px-1 text-[11px] text-neutral-500 transition-all duration-150 hover:underline"
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </div>
-            ) : (
-              // PRD §9 requires a discoverable delete-everything action.
-              <button
-                onClick={() => setConfirmWipe(true)}
-                className="cursor-pointer px-1.5 text-[11px] text-neutral-400 transition-all duration-150 hover:text-red-500"
-              >
-                Delete local data…
-              </button>
-            )}
-          </div>
         </aside>
 
         <main className="min-w-0 flex-1">
-          {pasting ? (
-            <PasteConversation
-              mode={pasting}
-              onDone={async (context) => {
-                setPasting(null);
-                setSelected({ kind: "context", context });
-                await reload(query);
-                setToast("Context generated");
-              }}
-              onCancel={() => setPasting(null)}
-              onError={setToast}
-            />
-          ) : selected?.kind === "page" ? (
+          {selected?.kind === "page" ? (
             <PageDetail
               page={selected.page}
               backlinks={selected.backlinks}
@@ -279,46 +158,6 @@ export default function Browser() {
                   setToast(String(e));
                 }
               }}
-            />
-          ) : selected?.kind === "context" ? (
-            <ContextDetail
-              context={selected.context}
-              onBack={() => setSelected(null)}
-              onUpdate={() =>
-                setPasting({
-                  kind: "update",
-                  id: selected.context.id,
-                  name: selected.context.name,
-                })
-              }
-              onHandoff={async () => {
-                try {
-                  setToast("Writing handoff…");
-                  await api.generateHandoff(selected.context.id);
-                  setToast("Handoff copied");
-                } catch (e) {
-                  setToast(String(e));
-                }
-              }}
-              onCopy={async () => {
-                try {
-                  await api.copyContext(selected.context.id);
-                  setToast("Copied to clipboard");
-                } catch (e) {
-                  setToast(String(e));
-                }
-              }}
-              onSaved={async (context) => {
-                setSelected({ kind: "context", context });
-                await reload(query);
-                setToast("Saved");
-              }}
-              onDeleted={async () => {
-                setSelected(null);
-                await reload(query);
-                setToast("Deleted");
-              }}
-              onError={setToast}
             />
           ) : (
             <div className="flex h-full flex-col items-center justify-center gap-3 text-neutral-400">

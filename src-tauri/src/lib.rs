@@ -1,6 +1,4 @@
-mod ai;
 mod commands;
-mod context;
 mod db;
 mod index_md;
 mod launcher;
@@ -22,25 +20,6 @@ pub fn wiki_root(app: &tauri::AppHandle) -> std::result::Result<std::path::PathB
         .home_dir()
         .map(|home| home.join("Baton"))
         .map_err(|e| format!("no home directory: {e}"))
-}
-
-/// Stable per-install id, sent with generation requests so the proxy can
-/// rate-limit without accounts. Trivially spoofable — it is friction against
-/// casual abuse, not authentication.
-pub fn device_id(app: &tauri::AppHandle) -> String {
-    let Ok(dir) = app.path().app_data_dir() else {
-        return "unknown".to_string();
-    };
-    let path = dir.join("device-id");
-    if let Ok(existing) = std::fs::read_to_string(&path) {
-        let existing = existing.trim().to_string();
-        if !existing.is_empty() {
-            return existing;
-        }
-    }
-    let fresh = uuid::Uuid::new_v4().to_string();
-    let _ = std::fs::write(&path, &fresh);
-    fresh
 }
 
 use tauri::Manager;
@@ -169,14 +148,6 @@ pub fn run() {
             }
         })
         .invoke_handler(tauri::generate_handler![
-            commands::list_contexts,
-            commands::search_contexts,
-            commands::get_context,
-            commands::save_context,
-            commands::delete_context,
-            commands::delete_all_data,
-            commands::copy_context,
-            commands::render_context,
             commands::hide_launcher,
             commands::open_main_window,
             commands::sync_wiki,
@@ -191,10 +162,6 @@ pub fn run() {
             commands::copy_page,
             commands::build_primer,
             commands::copy_primer,
-            commands::create_context_from_conversation,
-            commands::update_context_from_conversation,
-            commands::generate_handoff,
-            commands::ai_endpoint,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

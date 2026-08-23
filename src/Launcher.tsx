@@ -3,22 +3,12 @@ import { Command } from "cmdk";
 import { openPath } from "@tauri-apps/plugin-opener";
 import * as api from "./lib/api";
 import { MOD_LABEL, ENTER_LABEL, hasMod } from "./lib/platform";
-import type { Context, PageHit, Primer } from "./types";
-import { ContextDetail } from "./components/ContextDetail";
-import { PasteConversation } from "./components/PasteConversation";
-
-type Mode =
-  | { kind: "list" }
-  | { kind: "detail"; id: string }
-  | { kind: "paste"; name: string }
-  | { kind: "update"; id: string; name: string };
+import type { PageHit, Primer } from "./types";
 
 export default function Launcher() {
   const [query, setQuery] = useState("");
   const [rows, setRows] = useState<PageHit[]>([]);
   const [selected, setSelected] = useState("");
-  const [mode, setMode] = useState<Mode>({ kind: "list" });
-  const [detail, setDetail] = useState<Context | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [primer, setPrimer] = useState<Primer | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -85,8 +75,6 @@ export default function Launcher() {
 
   const dismiss = useCallback(() => {
     setQuery("");
-    setMode({ kind: "list" });
-    setDetail(null);
     void api.hideLauncher();
   }, []);
 
@@ -96,16 +84,12 @@ export default function Launcher() {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
         e.preventDefault();
-        if (mode.kind === "list") dismiss();
-        else {
-          setMode({ kind: "list" });
-          setDetail(null);
-        }
+        dismiss();
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [mode, dismiss]);
+  }, [dismiss]);
 
   useEffect(() => {
     if (toast) {
@@ -145,95 +129,6 @@ export default function Launcher() {
       setToast(String(e));
     }
   };
-
-  const copyContext = async (id: string) => {
-    try {
-      await api.copyContext(id);
-      setToast("Copied to clipboard");
-      setTimeout(dismiss, 350);
-    } catch (e) {
-      setToast(String(e));
-    }
-  };
-
-  /// Manual creation, kept for a context you want to write yourself.
-  const createBlank = async (name: string) => {
-    try {
-      const ctx = await api.saveContext({ name });
-      setQuery("");
-      await reload("");
-      setDetail(ctx);
-      setMode({ kind: "detail", id: ctx.id });
-    } catch (e) {
-      setToast(String(e));
-    }
-  };
-
-  const afterGenerate = async (ctx: Context) => {
-    setQuery("");
-    await reload("");
-    setDetail(ctx);
-    setMode({ kind: "detail", id: ctx.id });
-    setToast("Context generated");
-  };
-
-  if (mode.kind === "paste" || mode.kind === "update") {
-    return (
-      <Shell toast={toast}>
-        <PasteConversation
-          mode={
-            mode.kind === "paste"
-              ? { kind: "create" }
-              : { kind: "update", id: mode.id, name: mode.name }
-          }
-          initialName={mode.kind === "paste" ? mode.name : undefined}
-          onDone={afterGenerate}
-          onCancel={() => setMode({ kind: "list" })}
-          onError={setToast}
-        />
-      </Shell>
-    );
-  }
-
-  if (mode.kind === "detail" && detail) {
-    return (
-      <Shell toast={toast}>
-        <ContextDetail
-          context={detail}
-          onBack={() => {
-            setMode({ kind: "list" });
-            setDetail(null);
-          }}
-          onCopy={() => copyContext(detail.id)}
-          onUpdate={() =>
-            setMode({ kind: "update", id: detail.id, name: detail.name })
-          }
-          onHandoff={async () => {
-            try {
-              setToast("Writing handoff…");
-              await api.generateHandoff(detail.id);
-              setToast("Handoff copied");
-              setTimeout(dismiss, 350);
-            } catch (e) {
-              setToast(String(e));
-            }
-          }}
-          onSaved={async (c) => {
-            setDetail(c);
-            await reload(query);
-            setToast("Saved");
-          }}
-          onDeleted={async () => {
-            setMode({ kind: "list" });
-            setDetail(null);
-            await reload(query);
-            setToast("Deleted");
-          }}
-          onError={setToast}
-        />
-      </Shell>
-    );
-  }
 
   const trimmed = query.trim();
 
@@ -300,19 +195,6 @@ export default function Launcher() {
               ))}
             </Group>
           )}
-
-          <Group heading="Create">
-            <Item onSelect={() => setMode({ kind: "paste", name: trimmed })}>
-              Paste a conversation
-              {trimmed && <span className="text-neutral-400"> as “{trimmed}”</span>}
-            </Item>
-            {trimmed && (
-              <Item onSelect={() => void createBlank(trimmed)}>
-                Create empty context{" "}
-                <span className="text-neutral-400">“{trimmed}”</span>
-              </Item>
-            )}
-          </Group>
 
           <Group heading="Actions">
             <Item onSelect={() => void api.openMainWindow()}>Open main window</Item>
