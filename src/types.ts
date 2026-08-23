@@ -96,3 +96,11 @@ export interface SkillHost {
   /** Installed, but differs from the version this build ships. */
   outdated: boolean;
 }
+
+/** A project row in the launcher — mirrors `db::ProjectHit`. */
+export interface ProjectHit {
+  slug: string;
+  title: string;
+  pageCount: number;
+  updated: string;
+}

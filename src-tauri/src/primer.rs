@@ -13,12 +13,13 @@ use serde::Serialize;
 
 use crate::wiki::{Page, PageType, Status};
 
+/// Placeholder in the header, replaced once `fill` knows how many pages
+/// actually survived the budget and the live filters.
+const PAGE_COUNT: &str = "{{PAGE_COUNT}}";
+
 /// About four characters per token for English prose. Close enough to keep a
 /// budget honest, and it costs nothing next to a real tokenizer.
 const CHARS_PER_TOKEN: usize = 4;
-
-/// Cap on a one-line summary, in characters, before it is trimmed at a word.
-const SUMMARY_CHARS: usize = 160;
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -57,12 +58,10 @@ pub fn most_recent_project(pages: &[Page]) -> Option<String> {
 /// One candidate chunk of the brief, in priority order.
 struct Block {
     text: String,
-    /// Ids this block carries. Tracked explicitly rather than inferred from the
-    /// text: the project page renders as its sections and its id never appears,
-    /// so substring matching would silently never flag the page the brief leans
-    /// on hardest.
+    /// Ids of the pages this block carries. Tracked explicitly rather than
+    /// inferred from the text: the project page is rendered as its sections and
+    /// its id never appears, so substring matching silently never flags it.
     ids: Vec<String>,
-    pages: usize,
     /// Included whether or not the budget allows. The goal and the next step
     /// are the two things a primer exists to carry.
     required: bool,
@@ -89,10 +88,13 @@ pub fn assemble(
 
     let overview = mine.iter().find(|p| p.frontmatter.page_type == PageType::Project);
 
+    // The count is filled in by `fill`, once it knows what actually survived
+    // the budget. Counting every page on disk here overstated the brief: live
+    // filtering drops superseded decisions, so "from 14 wiki pages" could sit
+    // above a document containing nine.
     let mut blocks = vec![Block {
-        text: header(project, mine.len() + concepts.len(), today),
+        text: header(project, today),
         ids: Vec::new(),
-        pages: 0,
         required: true,
     }];
 
@@ -100,62 +102,49 @@ pub fn assemble(
         blocks.push(Block {
             text: format!("{}\n", page.body),
             ids: vec![page.id.clone()],
-            pages: 1,
             required: true,
         });
     }
 
-    blocks.push(summary_block(
-        "Decisions already taken",
-        "Do not re-propose what a Rejected line already ruled out.",
-        &live(&mine, PageType::Decision),
-        "Decision",
-    ));
-
-    blocks.push(summary_block(
-        "Open questions",
-        "Undecided. Do not assume an answer.",
-        &live(&mine, PageType::Open),
-        "The question",
-    ));
-
-    // Attempts are never current, so they are selected by type alone.
-    blocks.push(summary_block(
-        "Routes already tried",
-        "These failed or were dropped. Do not retry one without a new reason.",
-        &of_type(&mine, PageType::Attempt),
-        "Why it failed",
-    ));
-
-    blocks.push(summary_block(
-        "Constraints learned the hard way",
-        "Each one cost a debugging session already.",
-        &concepts,
-        "The constraint",
-    ));
-
-    blocks.push(summary_block(
-        "Components",
-        "Each has its own gotchas page. Read it before touching those files.",
-        &live(&mine, PageType::Component),
-        "What it does",
-    ));
-
-    // One hop out from the overview, in full. The lists above are a map, these
-    // are the pages the project page itself says matter most.
-    let all: Vec<&Page> = pages.iter().collect();
-    for (i, page) in linked_from(overview, &all).iter().enumerate() {
-        let heading = if i == 0 {
-            "## Pages the overview links to, in full\n\n"
-        } else {
-            ""
-        };
-        blocks.push(Block {
-            text: format!("{heading}{}\n", page.body),
-            ids: vec![page.id.clone()],
-            pages: 1,
-            required: false,
-        });
+    // Every page in full, not a summary of it.
+    //
+    // Copying a project means copying what is known about it. A one-line
+    // digest of a decision loses the `## Rejected` section, which is the part
+    // that stops the option being re-proposed — so the digest drops exactly the
+    // content the page existed to carry.
+    //
+    // The order is the priority order: if the budget ever runs out, what
+    // survives is what a fresh session most needs. It rarely bites — a project
+    // is capped at 300 words per page by the schema, so twenty pages fit inside
+    // a 12k budget with room to spare.
+    for (heading, note, group) in [
+        (
+            "Decisions already taken",
+            "Do not re-propose what a Rejected section already ruled out.",
+            live(&mine, PageType::Decision),
+        ),
+        (
+            "Open questions",
+            "Undecided. Do not assume an answer.",
+            live(&mine, PageType::Open),
+        ),
+        (
+            "Routes already tried",
+            "These failed or were dropped. Do not retry one without a new reason.",
+            of_type(&mine, PageType::Attempt),
+        ),
+        (
+            "Constraints learned the hard way",
+            "Each one cost a debugging session already.",
+            concepts.clone(),
+        ),
+        (
+            "Components",
+            "Read the constraints on each before touching those files.",
+            live(&mine, PageType::Component),
+        ),
+    ] {
+        blocks.extend(full_pages(heading, note, &group));
     }
 
     fill(blocks, project, budget_tokens, lint)
@@ -171,12 +160,12 @@ fn fill(
     lint: &crate::lint::Report,
 ) -> Primer {
     let mut text = String::new();
-    // Which pages reached the brief, so a warning never points at something the
-    // reader cannot see.
-    let mut shown: std::collections::HashSet<String> = std::collections::HashSet::new();
     let mut included = 0;
     let mut dropped = 0;
     let mut full = false;
+    // Which pages actually made it into the brief, so warnings name only pages
+    // the reader can see.
+    let mut shown: std::collections::HashSet<String> = std::collections::HashSet::new();
 
     for block in &blocks {
         if block.text.trim().is_empty() {
@@ -186,11 +175,11 @@ fn fill(
         if block.required || (!full && fits) {
             text.push_str(&block.text);
             text.push('\n');
-            included += block.pages;
+            included += block.ids.len();
             shown.extend(block.ids.iter().cloned());
         } else {
             full = true;
-            dropped += block.pages;
+            dropped += block.ids.len();
         }
     }
 
@@ -200,10 +189,14 @@ fn fill(
         ));
     }
 
-    // Warnings go in the brief, not in a report nobody opens: the model reading
-    // this needs to know which lines to distrust.
-    let mut flagged: Vec<(&String, &Vec<crate::lint::Finding>)> =
-        lint.iter().filter(|(id, _)| shown.contains(*id)).collect();
+    // Warnings go in the brief itself, not in a report nobody opens: the model
+    // reading this needs to know which lines to distrust. Only pages actually
+    // included are named — a warning about a page the reader cannot see is
+    // noise.
+    let mut flagged: Vec<(&String, &Vec<crate::lint::Finding>)> = lint
+        .iter()
+        .filter(|(id, _)| shown.contains(*id))
+        .collect();
     flagged.sort_by_key(|(id, _)| id.as_str());
 
     if !flagged.is_empty() {
@@ -219,6 +212,9 @@ fn fill(
         }
     }
 
+    // Substituted now that the real figure is known.
+    let text = text.replace(PAGE_COUNT, &included.to_string());
+
     Primer {
         project: project.to_string(),
         tokens: estimate_tokens(&text),
@@ -228,10 +224,10 @@ fn fill(
     }
 }
 
-fn header(project: &str, page_count: usize, today: NaiveDate) -> String {
+fn header(project: &str, today: NaiveDate) -> String {
     format!(
         "# {project}: project context\n\n\
-         Assembled by Baton on {today} from {page_count} wiki pages.\n\n\
+         Assembled by Baton on {today} from {PAGE_COUNT} wiki pages.\n\n\
          Every entry comes from a page written by the agent that did the work. A page\n\
          marked superseded or abandoned is kept deliberately: it is history, and the\n\
          reason something is no longer done that way. Each line carries the date its\n\
@@ -239,39 +235,54 @@ fn header(project: &str, page_count: usize, today: NaiveDate) -> String {
     )
 }
 
-fn summary_block(heading: &str, note: &str, pages: &[&Page], section: &str) -> Block {
+/// One block per page, carrying the whole page, under a shared heading.
+///
+/// Separate blocks rather than one big one so the budget can drop the tail of a
+/// section instead of the entire section — losing the last two decisions is far
+/// better than losing all of them.
+fn full_pages(heading: &str, note: &str, pages: &[&Page]) -> Vec<Block> {
     if pages.is_empty() {
-        return Block {
-            text: String::new(),
-            ids: Vec::new(),
-        pages: 0,
-            required: false,
-        };
+        return Vec::new();
     }
 
-    let mut text = format!("## {heading}\n\n{note}\n\n");
-    for page in pages {
-        let summary = page
-            .section(section)
-            .map(|s| first_line(&s.body))
-            .unwrap_or_default();
-        let title = if page.title.is_empty() { &page.id } else { &page.title };
+    let mut out = Vec::with_capacity(pages.len());
+    for (i, page) in pages.iter().enumerate() {
+        // The heading rides on the first page of the group, so a group that is
+        // dropped entirely takes its heading with it rather than leaving an
+        // empty section in the brief.
+        let lead = if i == 0 {
+            format!("## {heading}\n\n{note}\n\n")
+        } else {
+            String::new()
+        };
         let status = match page.frontmatter.status {
             Status::Current => String::new(),
             other => format!(" [{}]", other.as_str()),
         };
-        text.push_str(&format!(
-            "- {title}{status}: {summary} ({})\n",
-            page.frontmatter.updated
-        ));
+        let title = if page.title.is_empty() { &page.id } else { &page.title };
+        out.push(Block {
+            text: format!(
+                "{lead}### {title}{status}\n_{}, updated {}_\n\n{}\n",
+                page.id, page.frontmatter.updated, body_without_title(page)
+            ),
+            ids: vec![page.id.clone()],
+            required: false,
+        });
     }
+    out
+}
 
-    Block {
-        text,
-        ids: pages.iter().map(|p| p.id.clone()).collect(),
-        pages: pages.len(),
-        required: false,
-    }
+/// A page body with its own `# Title` line removed — the brief re-renders the
+/// title as `###` so every page sits at the same depth under its group.
+fn body_without_title(page: &Page) -> String {
+    page.body
+        .lines()
+        .skip_while(|l| l.trim().is_empty())
+        .skip_while(|l| l.starts_with("# "))
+        .collect::<Vec<_>>()
+        .join("\n")
+        .trim()
+        .to_string()
 }
 
 fn of_type<'a>(pages: &[&'a Page], want: PageType) -> Vec<&'a Page> {
@@ -291,107 +302,8 @@ fn live<'a>(pages: &[&'a Page], want: PageType) -> Vec<&'a Page> {
         .collect()
 }
 
-/// Whole pages one hop out from the overview, in the order it links to them.
-/// Deliberately includes pages already summarised above: the summary is an
-/// index entry, this is the content.
-fn linked_from<'a>(overview: Option<&&'a Page>, pages: &[&'a Page]) -> Vec<&'a Page> {
-    let Some(overview) = overview else {
-        return Vec::new();
-    };
-
-    let mut seen = std::collections::HashSet::new();
-    let mut out = Vec::new();
-    for link in &overview.links {
-        if !seen.insert(&link.target) {
-            continue;
-        }
-        if let Some(page) = pages.iter().find(|p| p.id == link.target) {
-            out.push(*page);
-        }
-    }
-    out
-}
-
-/// Below this a summary reads as a fragment, so a second sentence is pulled in.
-/// Deliberately low: one complete sentence is almost always the better summary.
-const MIN_SUMMARY_CHARS: usize = 30;
-
 /// The opening of a section, cut at a sentence boundary.
 ///
-/// Pages are hard-wrapped at about 85 columns, so the first physical line is
-/// almost always half a sentence. Take the whole first paragraph, then cut on
-/// sentences, which is what makes these read as claims rather than fragments.
-fn first_line(body: &str) -> String {
-    let paragraph: Vec<&str> = body
-        .lines()
-        .map(str::trim)
-        .skip_while(|l| l.is_empty() || l.starts_with("```"))
-        .take_while(|l| !l.is_empty() && !l.starts_with("```") && !l.starts_with('#'))
-        .collect();
-
-    if paragraph.is_empty() {
-        return String::new();
-    }
-
-    let text = paragraph
-        .join(" ")
-        .replace("**", "")
-        .trim_start_matches("- ")
-        .trim_start_matches("* ")
-        .trim()
-        .to_string();
-
-    // Whole sentences until there is enough to be worth reading.
-    let mut summary = String::new();
-    for sentence in split_sentences(&text) {
-        if !summary.is_empty() {
-            summary.push(' ');
-        }
-        summary.push_str(sentence.trim());
-        if summary.chars().count() >= MIN_SUMMARY_CHARS {
-            break;
-        }
-    }
-    let summary = if summary.is_empty() { text } else { summary };
-    let summary = summary.trim();
-
-    if summary.chars().count() <= SUMMARY_CHARS {
-        return summary.to_string();
-    }
-    let cut: String = summary.chars().take(SUMMARY_CHARS).collect();
-    match cut.rsplit_once(' ') {
-        Some((head, _)) => format!("{head}..."),
-        None => format!("{cut}..."),
-    }
-}
-
-/// Split on sentence ends, keeping the punctuation. Deliberately crude: it only
-/// has to handle prose a page was written in, and a wrong split costs a slightly
-/// long summary rather than a wrong claim.
-fn split_sentences(text: &str) -> Vec<&str> {
-    let mut out = Vec::new();
-    let mut start = 0;
-    let bytes = text.as_bytes();
-
-    for (i, &byte) in bytes.iter().enumerate() {
-        if byte != b'.' && byte != b'?' && byte != b'!' {
-            continue;
-        }
-        // A period inside `~/Baton/x.md` or `0.13` does not end a sentence.
-        match bytes.get(i + 1) {
-            Some(b' ') | None => {}
-            _ => continue,
-        }
-        out.push(&text[start..=i]);
-        start = i + 1;
-    }
-
-    if out.is_empty() {
-        return vec![text];
-    }
-    out
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -496,27 +408,6 @@ mod tests {
     }
 
     #[test]
-    fn concepts_are_included_even_though_they_belong_to_no_project() {
-        let p = assemble(&corpus(), "baton", 10_000, today(), &Default::default());
-        let summary = p
-            .text
-            .lines()
-            .find(|l| l.starts_with("- Never hold a std Mutex"))
-            .expect("a cross-project gotcha must reach the brief");
-
-        // Bold markers are page formatting. They must not survive into a list.
-        assert!(!summary.contains("**"));
-        assert!(summary.contains("A guard held across an `.await`"));
-    }
-
-    #[test]
-    fn a_page_the_overview_links_to_is_carried_whole() {
-        let p = assemble(&corpus(), "baton", 10_000, today(), &Default::default());
-        // The one-hop body, not just the one-line summary of the same page.
-        assert!(p.text.contains("## The symptom"));
-    }
-
-    #[test]
     fn the_budget_drops_from_the_bottom_and_says_so() {
         let full = assemble(&corpus(), "baton", 10_000, today(), &Default::default());
         let tight = assemble(&corpus(), "baton", 200, today(), &Default::default());
@@ -539,66 +430,41 @@ mod tests {
     }
 
     #[test]
-    fn a_summary_is_whole_sentences_not_the_first_wrapped_line() {
-        // Pages are hard-wrapped at about 85 columns, so the first physical
-        // line of a section is almost always half a sentence.
-        let wrapped = vec![page(
-            "projects/baton/decisions/no-model-calls",
-            "decision",
-            "baton",
-            "current",
-            "# Baton makes no model calls\n\n## Decision\n\n\
-             No API key, no proxy, no rate limit, no cost per use. Every job that\n\
-             looked like it needed a model is handled elsewhere.\n\n\
-             ## Why\n\nNothing needs inference.\n\n## Rejected\n\nA hosted proxy.\n",
-        )];
-
-        let p = assemble(&wrapped, "baton", 10_000, today(), &Default::default());
-        let summary = p
-            .text
-            .lines()
-            .find(|l| l.starts_with("- Baton makes no model calls"))
-            .unwrap();
-
-        assert!(summary.contains("no cost per use."));
-        assert!(
-            !summary.contains("Every job that"),
-            "the summary ran past its first sentence"
-        );
+    fn concepts_are_included_even_though_they_belong_to_no_project() {
+        let p = assemble(&corpus(), "baton", 10_000, today(), &Default::default());
+        // A constraint learned once applies everywhere, which is the whole
+        // argument for one central wiki rather than one per repository.
+        assert!(p.text.contains("Never hold a std Mutex"));
+        // And it arrives whole, not as a digest: the fix is the point.
+        assert!(p.text.contains("A guard held across an `.await`"));
     }
 
     #[test]
-    fn a_period_inside_a_path_or_a_version_does_not_end_a_sentence() {
-        assert_eq!(
-            split_sentences("Pinned to reqwest 0.13 and rustls. Then it built."),
-            ["Pinned to reqwest 0.13 and rustls.", " Then it built."]
-        );
-        assert_eq!(split_sentences("No punctuation here"), ["No punctuation here"]);
+    fn a_decision_arrives_with_its_rejected_section_intact() {
+        // Why whole pages: a one-line digest drops `## Rejected`, the section
+        // that stops the option being re-proposed.
+        let p = assemble(&corpus(), "baton", 10_000, today(), &Default::default());
+        assert!(p.text.contains("## Rejected"));
+        assert!(p.text.contains("SQLite as truth"), "rejected alternative dropped");
     }
 
     #[test]
     fn a_brief_carrying_a_flagged_page_says_so_in_its_own_text() {
-        // The point of the phase: a warning inside the brief, so the model
-        // reading it knows which lines to distrust.
         let pages = corpus();
-        let flagged = pages
-            .iter()
+        let flagged = pages.iter()
             .find(|p| p.frontmatter.page_type == PageType::Project)
-            .expect("corpus has an overview")
-            .id
-            .clone();
+            .expect("corpus has an overview").id.clone();
         let mut lint = crate::lint::Report::new();
         lint.insert(flagged.clone(), vec![crate::lint::Finding::TooLong { words: 412 }]);
 
         let p = assemble(&pages, "baton", 10_000, today(), &lint);
-        assert!(p.text.contains("## Stale, treat with care"), "{}", p.text);
-        assert!(p.text.contains(&flagged), "the flagged page is not named");
-        assert!(p.text.contains("412 words"), "the reason is not given");
+        assert!(p.text.contains("## Stale, treat with care"));
+        assert!(p.text.contains(&flagged));
+        assert!(p.text.contains("412 words"));
     }
 
     #[test]
     fn a_clean_wiki_gets_no_warning_section() {
-        // Otherwise every brief carries an empty scary heading.
         let p = assemble(&corpus(), "baton", 10_000, today(), &Default::default());
         assert!(!p.text.contains("Stale, treat with care"));
     }
@@ -607,12 +473,23 @@ mod tests {
     fn a_warning_about_a_page_that_was_dropped_is_not_shown() {
         // Warning about a page the reader cannot see is noise.
         let mut lint = crate::lint::Report::new();
-        lint.insert(
-            "projects/baton/not-in-this-brief".to_string(),
-            vec![crate::lint::Finding::Orphan],
-        );
+        lint.insert("projects/baton/not-in-this-brief".to_string(),
+                    vec![crate::lint::Finding::Orphan]);
         let p = assemble(&corpus(), "baton", 10_000, today(), &lint);
         assert!(!p.text.contains("not-in-this-brief"));
+    }
+
+    #[test]
+    fn the_header_counts_what_the_brief_actually_carries() {
+        // Counting every page on disk overstated it: live filtering drops
+        // superseded decisions, so the header claimed more than was included.
+        let p = assemble(&corpus(), "baton", 10_000, today(), &Default::default());
+        assert!(
+            p.text.contains(&format!("from {} wiki pages", p.pages_included)),
+            "header disagrees with pages_included: {}",
+            p.text.lines().take(3).collect::<Vec<_>>().join(" ")
+        );
+        assert!(!p.text.contains("PAGE_COUNT"), "placeholder leaked into the brief");
     }
 
     #[test]

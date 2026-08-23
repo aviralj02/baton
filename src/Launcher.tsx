@@ -1,41 +1,24 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Command } from "cmdk";
-import { openPath } from "@tauri-apps/plugin-opener";
 import * as api from "./lib/api";
-import { MOD_LABEL, ENTER_LABEL, hasMod } from "./lib/platform";
-import type { PageHit, Primer } from "./types";
+import { ENTER_LABEL } from "./lib/platform";
+import type { ProjectHit } from "./types";
 
 export default function Launcher() {
   const [query, setQuery] = useState("");
-  const [rows, setRows] = useState<PageHit[]>([]);
+  const [rows, setRows] = useState<ProjectHit[]>([]);
   const [selected, setSelected] = useState("");
   const [toast, setToast] = useState<string | null>(null);
-  const [primer, setPrimer] = useState<Primer | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const queryRef = useRef(query);
 
   const reload = useCallback(async (q: string) => {
     try {
-      setRows(q.trim() ? await api.searchPages(q) : await api.listPages());
+      setRows(q.trim() ? await api.searchProjects(q) : await api.listProjects());
     } catch (e) {
       setToast(String(e));
     }
   }, []);
-
-  // Composing the brief is pure text work over the parsed files, so it is
-  // rebuilt rather than cached. A wiki with no pages has no primer, which is a
-  // normal state and not an error worth a toast.
-  const refreshPrimer = useCallback(async () => {
-    try {
-      setPrimer(await api.buildPrimer());
-    } catch {
-      setPrimer(null);
-    }
-  }, []);
-
-  useEffect(() => {
-    void refreshPrimer();
-  }, [refreshPrimer]);
 
   // Search runs in SQLite (FTS5), not in the client, so every keystroke is a
   // round trip. Debounced to keep typing smooth on large stores.
@@ -47,7 +30,9 @@ export default function Launcher() {
   // The agent writes pages while the user is still in a session; without this
   // the launcher shows a stale list until the app restarts.
   useEffect(() => {
-    const un = api.onWikiChanged(() => void reload(query));
+    const un = api.onWikiChanged(() => {
+      void reload(query);
+    });
     return () => void un.then((f) => f());
   }, [query, reload]);
 
@@ -67,19 +52,18 @@ export default function Launcher() {
         } catch (e) {
           setToast(String(e));
         }
-        await Promise.all([reload(queryRef.current), refreshPrimer()]);
+        await reload(queryRef.current);
       })();
     });
     return () => void unlisten.then((off) => off());
-  }, [reload, refreshPrimer]);
+  }, [reload]);
 
   const dismiss = useCallback(() => {
     setQuery("");
     void api.hideLauncher();
   }, []);
 
-  // Escape steps back one level rather than always closing — inside a detail
-  // view, closing the whole launcher would lose the user's place.
+  // The launcher is a single list now, so Escape always closes it.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
@@ -98,33 +82,15 @@ export default function Launcher() {
     }
   }, [toast]);
 
-  const copyPrimer = async () => {
+  /// The only action in the launcher: the whole of one project's context on
+  /// the clipboard. Every page of it, assembled — the file split is an
+  /// organisational detail of the wiki folder, not something a user chooses
+  /// between at the moment they want to paste.
+  const copyProject = async (slug?: string) => {
     try {
-      const copied = await api.copyPrimer();
-      setToast(`${copied.project} context copied, ${copied.pagesIncluded} pages`);
+      const copied = await api.copyPrimer(slug);
+      setToast(`${copied.project} context copied`);
       setTimeout(dismiss, 350);
-    } catch (e) {
-      setToast(String(e));
-    }
-  };
-
-  const copyPage = async (id: string) => {
-    try {
-      await api.copyPage(id);
-      setToast("Copied to clipboard");
-      // The whole point is pasting elsewhere, so get out of the way.
-      setTimeout(dismiss, 350);
-    } catch (e) {
-      setToast(String(e));
-    }
-  };
-
-  /// Hand the file to whatever owns .md on this machine, which is the editor
-  /// the user already writes these pages in.
-  const openFile = async (hit: PageHit) => {
-    try {
-      await openPath(hit.path);
-      dismiss();
     } catch (e) {
       setToast(String(e));
     }
@@ -139,15 +105,6 @@ export default function Launcher() {
         value={selected}
         onValueChange={setSelected}
         className="flex h-full flex-col"
-        onKeyDown={(e) => {
-          if (hasMod(e) && e.key === "Enter") {
-            e.preventDefault();
-            // cmdk normalises the value it reports, so match case-insensitively.
-            // Rows that are not pages match nothing and fall through.
-            const hit = rows.find((r) => r.id.toLowerCase() === selected.toLowerCase());
-            if (hit) void openFile(hit);
-          }
-        }}
       >
         <div data-tauri-drag-region className="border-b border-black/5 dark:border-white/5">
           <Command.Input
@@ -164,34 +121,31 @@ export default function Launcher() {
           {/* The primary action, and the first thing selected. Hidden once the
               user types, because then they are hunting one page and Enter must
               belong to the top result rather than to the brief. */}
-          {primer && !trimmed && (
-            <Command.Item
-              value="primer"
-              onSelect={() => void copyPrimer()}
-              className={`${ITEM_BASE} mb-1 flex items-center gap-2`}
-            >
-              <span className="truncate font-medium">Copy {primer.project} context</span>
-              <span className="ml-auto shrink-0 pl-3 text-xs text-neutral-400">
-                {primer.pagesIncluded} pages
-              </span>
-              <span className="shrink-0 text-xs text-neutral-400">
-                ~{formatTokens(primer.tokens)}
-              </span>
-            </Command.Item>
-          )}
 
           {rows.length === 0 && (
             <div className="px-3 py-6 text-center text-sm text-neutral-400">
               {trimmed
-                ? `Nothing matches “${trimmed}”.`
-                : "No pages yet. Run /baton at the end of a session to write one."}
+                ? `No project matches “${trimmed}”.`
+                : "No projects yet."}
+              {!trimmed && (
+                <button
+                  onClick={() => void api.openMainWindow()}
+                  className="mt-1 block w-full text-center text-[13px] text-neutral-500 underline-offset-2 hover:underline dark:text-neutral-400"
+                >
+                  Open Baton to finish setup
+                </button>
+              )}
             </div>
           )}
 
           {rows.length > 0 && (
-            <Group heading={trimmed ? "Results" : "Recent"}>
+            <Group heading={trimmed ? "Results" : "Projects"}>
               {rows.map((r) => (
-                <PageItem key={r.id} hit={r} onSelect={() => void copyPage(r.id)} />
+                <ProjectItem
+                  key={r.slug}
+                  hit={r}
+                  onSelect={() => void copyProject(r.slug)}
+                />
               ))}
             </Group>
           )}
@@ -203,11 +157,7 @@ export default function Launcher() {
 
         <Footer>
           <span>↑↓ Navigate</span>
-          <span>{ENTER_LABEL} Copy</span>
-          <span className="ml-auto">
-            {MOD_LABEL}
-            {ENTER_LABEL} Open file
-          </span>
+          <span>{ENTER_LABEL} Copy full context</span>
         </Footer>
       </Command>
     </Shell>
@@ -259,27 +209,22 @@ export function Item({
  * A wiki page row. Two lines when the hit carries a snippet, one when it does
  * not, so the browse list stays dense and a search result shows why it matched.
  */
-function PageItem({ hit, onSelect }: { hit: PageHit; onSelect: () => void }) {
+/**
+ * One project. The launcher shows nothing smaller: the pages inside are how the
+ * wiki organises itself on disk, not a choice worth putting in front of someone
+ * who pressed a hotkey to get their context back.
+ */
+function ProjectItem({ hit, onSelect }: { hit: ProjectHit; onSelect: () => void }) {
   return (
     <Command.Item
-      value={hit.id}
+      value={`${hit.slug} ${hit.title}`}
       onSelect={onSelect}
-      className={`${ITEM_BASE} flex flex-col items-stretch gap-0.5`}
+      className={`${ITEM_BASE} flex items-center gap-2`}
     >
-      <div className="flex items-center gap-2">
-        <span className="truncate">{hit.title || hit.id}</span>
-        {/* The wiki keeps dead pages on purpose, so say which ones are dead. */}
-        {hit.status !== "current" && (
-          <span className="shrink-0 rounded bg-black/5 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-neutral-500 dark:bg-white/10 dark:text-neutral-400">
-            {hit.status}
-          </span>
-        )}
-        <span className="ml-auto shrink-0 pl-3 text-xs text-neutral-400">{hit.type}</span>
-        <span className="shrink-0 text-xs text-neutral-400">{relativeTime(hit.updated)}</span>
-      </div>
-      {hit.snippet && (
-        <span className="truncate text-xs text-neutral-400">{hit.snippet}</span>
-      )}
+      <span className="truncate font-medium">{hit.title}</span>
+      <span className="ml-auto shrink-0 pl-3 text-xs text-neutral-400">
+        {relativeTime(hit.updated)}
+      </span>
     </Command.Item>
   );
 }
@@ -290,11 +235,6 @@ export function Footer({ children }: { children: React.ReactNode }) {
       {children}
     </div>
   );
-}
-
-/** Token counts are estimates, so show them rounded rather than precise. */
-function formatTokens(tokens: number): string {
-  return tokens < 1000 ? `${tokens} tokens` : `${(tokens / 1000).toFixed(1)}k tokens`;
 }
 
 /** Compact relative time for list rows; falls back to the raw value. */

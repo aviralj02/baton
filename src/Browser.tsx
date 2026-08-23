@@ -117,22 +117,34 @@ export default function Browser() {
             </p>
           )}
 
-          {pages.length > 0 && <SidebarHeading>Pages</SidebarHeading>}
-          {pages.map((hit) => (
-            <SidebarRow
-              key={hit.id}
-              active={selectedId === hit.id}
-              onClick={() => void openPage(hit.id)}
-              title={hit.title || hit.id}
-              meta={
-                <span className="flex items-center gap-1.5">
-                  {hit.type}
-                  <Dot />
-                  {relativeTime(hit.updated)}
-                </span>
-              }
-              faded={hit.status !== "current"}
-            />
+          {/* Grouped by project, not one flat list. A flat list of every page
+              across every project reads as noise the moment there is more than
+              one project, and hides the fact that a project is the unit. */}
+          {groupByProject(pages).map(([project, group]) => (
+            <ProjectGroup
+              key={project}
+              name={project}
+              count={group.length}
+              // A search should not require reopening every folder to see hits.
+              defaultOpen={Boolean(query.trim()) || group.some((h) => h.id === selectedId)}
+            >
+              {group.map((hit) => (
+                <SidebarRow
+                  key={hit.id}
+                  active={selectedId === hit.id}
+                  onClick={() => void openPage(hit.id)}
+                  title={hit.title || hit.id}
+                  meta={
+                    <span className="flex items-center gap-1.5">
+                      {hit.type}
+                      <Dot />
+                      {relativeTime(hit.updated)}
+                    </span>
+                  }
+                  faded={hit.status !== "current"}
+                />
+              ))}
+            </ProjectGroup>
           ))}
 
         </aside>
@@ -179,11 +191,50 @@ export default function Browser() {
   );
 }
 
-function SidebarHeading({ children }: { children: React.ReactNode }) {
+function groupByProject(pages: PageHit[]): [string, PageHit[]][] {
+  const groups = new Map<string, PageHit[]>();
+  for (const hit of pages) {
+    // The tilde sorts them after every real project without a special case.
+    const key = hit.project ?? "~Constraints";
+    const list = groups.get(key) ?? [];
+    list.push(hit);
+    groups.set(key, list);
+  }
+  return [...groups.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([k, v]) => [k === "~Constraints" ? "Constraints" : k, v] as [string, PageHit[]]);
+}
+
+function ProjectGroup({
+  name,
+  count,
+  defaultOpen,
+  children,
+}: {
+  name: string;
+  count: number;
+  defaultOpen: boolean;
+  children: React.ReactNode;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+
+  // A search result that lands in a closed group would be invisible.
+  useEffect(() => {
+    if (defaultOpen) setOpen(true);
+  }, [defaultOpen]);
+
   return (
-    <p className="px-2.5 pb-1 pt-3 text-[10px] font-medium uppercase tracking-wide text-neutral-400">
-      {children}
-    </p>
+    <section className="mb-1">
+      <button
+        onClick={() => setOpen((v) => !v)}
+        className="flex w-full cursor-pointer items-center gap-1.5 rounded px-2 py-1 text-[11px] font-medium uppercase tracking-wide text-neutral-400 transition-colors hover:bg-black/[0.04] dark:hover:bg-white/5"
+      >
+        <span className={`transition-transform ${open ? "rotate-90" : ""}`}>›</span>
+        <span className="truncate">{name}</span>
+        <span className="ml-auto font-normal normal-case">{count}</span>
+      </button>
+      {open && <div className="ml-1.5 border-l border-black/5 pl-1.5 dark:border-white/5">{children}</div>}
+    </section>
   );
 }
 

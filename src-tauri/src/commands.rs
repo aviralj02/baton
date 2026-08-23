@@ -64,6 +64,18 @@ pub fn sync_wiki(app: tauri::AppHandle, db: State<'_, Db>) -> Result<db::IndexRe
     Ok(report)
 }
 
+/// Projects for the launcher. One row per project, never per page.
+#[tauri::command]
+pub fn list_projects(db: State<'_, Db>) -> Result<Vec<db::ProjectHit>> {
+    with_conn(&db, db::list_projects)
+}
+
+/// Projects matching a project name or a page title.
+#[tauri::command]
+pub fn search_projects(db: State<'_, Db>, query: String) -> Result<Vec<db::ProjectHit>> {
+    with_conn(&db, |c| db::search_projects(c, &query))
+}
+
 #[tauri::command]
 pub fn list_pages(db: State<'_, Db>) -> Result<Vec<db::PageHit>> {
     with_conn(&db, db::list_pages)

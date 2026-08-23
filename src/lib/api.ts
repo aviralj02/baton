@@ -13,6 +13,7 @@ import type {
   Page,
   PageHit,
   Primer,
+  ProjectHit,
   WikiStatus,
 } from "../types";
 
@@ -27,6 +28,17 @@ export const openMainWindow = () => invoke<void>("open_main_window");
  * sweep skips every file whose mtime and size match the indexed row.
  */
 export const syncWiki = () => invoke<IndexReport>("sync_wiki");
+
+/**
+ * Projects for the launcher — one row per project, never per page. A project's
+ * pages are an organisational detail of the wiki folder; what a user summons
+ * Baton for is "give me everything about X".
+ */
+export const listProjects = () => invoke<ProjectHit[]>("list_projects");
+
+/** Matches a project name or a page title. Deliberately not body text. */
+export const searchProjects = (query: string) =>
+  invoke<ProjectHit[]>("search_projects", { query });
 
 export const listPages = () => invoke<PageHit[]>("list_pages");
 

@@ -154,6 +154,8 @@ pub fn run() {
             commands::wiki_status,
             commands::install_skills,
             commands::reveal_wiki,
+            commands::list_projects,
+            commands::search_projects,
             commands::list_pages,
             commands::search_pages,
             commands::page_backlinks,

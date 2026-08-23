@@ -373,6 +373,82 @@ pub struct BrokenLink {
     pub dst: String,
 }
 
+/// One row per project, for the launcher.
+///
+/// The launcher deals in projects, not pages. A project's pages are an
+/// organisational detail of the wiki folder; what a user summons Baton for is
+/// "give me everything about X", and splitting that across eight rows makes the
+/// one action they want compete with seven they do not.
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectHit {
+    pub slug: String,
+    /// Title of the project's overview page, falling back to the slug.
+    pub title: String,
+    pub page_count: usize,
+    /// Newest `updated` across the project's pages.
+    pub updated: String,
+}
+
+fn row_to_project(row: &rusqlite::Row) -> rusqlite::Result<ProjectHit> {
+    let slug: String = row.get(0)?;
+    let title: Option<String> = row.get(1)?;
+    Ok(ProjectHit {
+        title: title.filter(|s| !s.trim().is_empty()).unwrap_or_else(|| slug.clone()),
+        slug,
+        page_count: row.get::<_, i64>(2)? as usize,
+        updated: row.get(3)?,
+    })
+}
+
+/// Projects, most recently touched first.
+pub fn list_projects(conn: &Connection) -> Result<Vec<ProjectHit>> {
+    let mut stmt = conn.prepare(
+        "SELECT p.project,
+                MAX(CASE WHEN p.type = 'project' THEN p.title END),
+                COUNT(*),
+                MAX(p.updated)
+         FROM pages p
+         WHERE p.project IS NOT NULL
+         GROUP BY p.project
+         ORDER BY MAX(p.updated) DESC, p.project",
+    )?;
+    let rows = stmt.query_map([], row_to_project)?;
+    Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
+}
+
+/// Projects matching a query on the project name or any page title.
+///
+/// Deliberately not a body search. Matching body text would surface a project
+/// because one sentence buried in one page mentioned the word, which reads as a
+/// false positive when the row shown is the whole project.
+pub fn search_projects(conn: &Connection, raw: &str) -> Result<Vec<ProjectHit>> {
+    let needle = raw.trim().to_lowercase();
+    if needle.is_empty() {
+        return list_projects(conn);
+    }
+
+    let like = format!("%{}%", needle.replace('%', "\\%").replace('_', "\\_"));
+    let mut stmt = conn.prepare(
+        "SELECT p.project,
+                MAX(CASE WHEN p.type = 'project' THEN p.title END),
+                COUNT(*),
+                MAX(p.updated)
+         FROM pages p
+         WHERE p.project IS NOT NULL
+           AND p.project IN (
+             SELECT project FROM pages
+             WHERE project IS NOT NULL
+               AND (LOWER(project) LIKE ?1 ESCAPE '\\'
+                    OR LOWER(title) LIKE ?1 ESCAPE '\\')
+           )
+         GROUP BY p.project
+         ORDER BY MAX(p.updated) DESC, p.project",
+    )?;
+    let rows = stmt.query_map(params![like], row_to_project)?;
+    Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
+}
+
 pub fn list_pages(conn: &Connection) -> Result<Vec<PageHit>> {
     let mut stmt = conn.prepare(&format!(
         "SELECT {HIT_COLUMNS}, '' FROM pages p ORDER BY p.updated DESC, p.id"
@@ -573,6 +649,19 @@ mod tests {
             }
         }
 
+fn write_as(&self, id: &str, page_type: &str, project: &str, body: &str) {
+            let path = self.root.join(format!("{id}.md"));
+            std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+            std::fs::write(
+                path,
+                format!(
+                    "---\ntype: {page_type}\nproject: {project}\nstatus: current\n\
+                     updated: 2026-08-22\nsources: [7123f71b]\n---\n\n{body}"
+                ),
+            )
+            .unwrap();
+        }
+
         fn write(&self, id: &str, status: &str, body: &str) {
             let path = self.root.join(format!("{id}.md"));
             std::fs::create_dir_all(path.parent().unwrap()).unwrap();
@@ -732,6 +821,76 @@ mod tests {
             (1, 0),
             "the mtime gate must yield to a parser change"
         );
+    }
+
+fn projects_group_their_pages_into_one_row() {
+        let w = Fixture::new();
+        w.write_as("projects/baton/overview", "project", "baton",
+            "# Baton\n\n## Goal\n\nA launcher.\n\n## Current state\n\nx\n\n## Next step\n\ny\n");
+        w.write_as("projects/baton/decisions/d", "decision", "baton",
+            "# A decision\n\n## Decision\n\nx\n\n## Why\n\ny\n\n## Rejected\n\nz\n");
+        w.sweep();
+
+        let rows = w.read(|c| list_projects(c));
+        assert_eq!(rows.len(), 1, "two pages of one project must be one row");
+        assert_eq!(rows[0].slug, "baton");
+        assert_eq!(rows[0].page_count, 2);
+        // The row is titled by the overview, not by the slug, when one exists.
+        assert_eq!(rows[0].title, "Baton");
+    }
+
+fn a_project_with_no_overview_falls_back_to_its_slug() {
+        let w = Fixture::new();
+        w.write_as("projects/orphaned/decisions/d", "decision", "orphaned",
+            "# A decision\n\n## Decision\n\nx\n\n## Why\n\ny\n\n## Rejected\n\nz\n");
+        w.sweep();
+        let rows = w.read(|c| list_projects(c));
+        assert_eq!(rows[0].title, "orphaned");
+    }
+
+fn search_matches_the_project_name_or_a_page_title() {
+        let w = Fixture::new();
+        w.write_as("projects/baton/overview", "project", "baton",
+            "# Baton\n\n## Goal\n\nx\n\n## Current state\n\ny\n\n## Next step\n\nz\n");
+        w.write_as("projects/baton/decisions/nspanel", "decision", "baton",
+            "# Use a non-activating NSPanel\n\n## Decision\n\nx\n\n## Why\n\ny\n\n## Rejected\n\nz\n");
+        w.write_as("projects/other/overview", "project", "other",
+            "# Other\n\n## Goal\n\nx\n\n## Current state\n\ny\n\n## Next step\n\nz\n");
+        w.sweep();
+
+        // By project name.
+        let hits = w.read(|c| search_projects(c, "bat"));
+        assert_eq!(hits.len(), 1);
+        assert_eq!(hits[0].slug, "baton");
+
+        // By a page title inside it — the project is the row, not the page.
+        let hits = w.read(|c| search_projects(c, "nspanel"));
+        assert_eq!(hits.len(), 1);
+        assert_eq!(hits[0].slug, "baton");
+        assert_eq!(hits[0].page_count, 2, "the whole project comes back");
+
+        // Empty query lists everything.
+        assert_eq!(w.read(|c| search_projects(c, "  ")).len(), 2);
+    }
+
+fn search_does_not_match_on_body_text() {
+        // Matching a word buried in one page would surface the whole project,
+        // which reads as a false positive when the row shown is the project.
+        let w = Fixture::new();
+        w.write_as("projects/baton/overview", "project", "baton",
+            "# Baton\n\n## Goal\n\nSomething about kubernetes.\n\n## Current state\n\ny\n\n## Next step\n\nz\n");
+        w.sweep();
+        assert!(w.read(|c| search_projects(c, "kubernetes")).is_empty());
+    }
+
+fn concepts_pages_are_not_a_project_row() {
+        // They belong to no project on purpose, and are folded into every
+        // brief rather than standing alone in the list.
+        let w = Fixture::new();
+        w.write_as("concepts/g", "gotcha", "null",
+            "# G\n\n## The constraint\n\na\n\n## The symptom\n\nb\n\n## The fix\n\nc\n");
+        w.sweep();
+        assert!(w.read(|c| list_projects(c)).is_empty());
     }
 
     #[test]
