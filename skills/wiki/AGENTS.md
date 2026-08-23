@@ -54,6 +54,31 @@ sources: [7123f71b]       # session ids that produced these claims
 
 ---
 
+## The title line
+
+Every page opens with a single `#` heading, immediately after the frontmatter, before
+any `##` section.
+
+```markdown
+# AppKit must be touched only on the main thread
+```
+
+**Write the claim, not the filename.** The title is what a reader sees in the launcher,
+in `index.md` and at the top of every brief; the file path is machinery and should
+never have to stand in for it.
+
+- State the finding as a sentence someone would recognise: "Files are the source of
+  truth", not "storage decision".
+- No page-type prefixes, no `decision:` or `gotcha:` labels. The type is frontmatter.
+- Under about ten words. If it needs more, the page is two pages.
+- A `project` page is titled with the project's name, not a sentence.
+
+The filename is derived from the title and is separate: lowercase, hyphenated, short.
+`appkit-main-thread.md` is a fine file for the title above — it does not have to repeat
+it.
+
+---
+
 ## Page types
 
 ### `project`
@@ -227,6 +252,13 @@ Use `[[path/to/page]]`, without the `.md`, relative to the wiki root.
 
 ```markdown
 See [[projects/baton/decisions/files-are-truth]] and [[concepts/tauri-nspanel]].
+```
+
+`[[path/to/page|what to show]]` renders the second half instead of the path. Use it
+whenever the path would read as machinery mid-sentence:
+
+```markdown
+Superseded by [[projects/baton/decisions/files-are-truth|files are the source of truth]].
 ```
 
 Every page should link to at least one other page. A page with no links in and none

@@ -14,8 +14,8 @@ conversations. Starting a new chat means re-summarising, re-explaining decisions
 re-listing what was already tried.
 
 A central folder of markdown at `~/Baton/` holds a wiki about every project. At the end
-of a session the user runs `/baton`, and the agent that did the work proposes page
-edits for approval. **Baton itself never calls a model.** It indexes the files, and one
+of a session the user runs `/baton`, and the agent that did the work files what it
+learned. **Baton itself never calls a model.** It indexes the files, and one
 hotkey puts a whole project's context on the clipboard.
 
 Three parts: a skill file the agent runs, a folder of markdown, and a launcher that
@@ -51,7 +51,8 @@ exchanges. That is the bar for every phase.
   body text.
 - The browser window browses pages, grouped per project, constraints last.
 - Pages written while the app runs appear without a restart; `index.md` is regenerated
-  on every reindex.
+  on every reindex. Deleting `~/Baton/` recreates it and empties the index, whether the
+  app is running or not.
 - First run creates `~/Baton/` and offers to install `/baton`.
 
 ---
@@ -118,7 +119,9 @@ is not re-proposed in six months.
 | 2026-08-22 | Markdown files are the source of truth. SQLite is a rebuildable index. |
 | 2026-08-22 | One central wiki at `~/Baton/`, not one per repository. |
 | 2026-08-22 | Baton makes no model calls. No key, no proxy, no cost per use. |
-| 2026-08-22 | Nothing is written without approval — the skill, and any future write path. |
+| 2026-08-24 | Every page carries a `#` title stating its claim, and the UI shows that rather than the path. The schema never asked for one, so pages arrived without it and the launcher, `index.md` and every brief fell back to the file path — which is how "draggable-list-full-mobile-rewrite" ended up as a page name. Lint flags a missing title; `[[id\|Title]]` keeps the path as the link target. |
+| 2026-08-24 | A deleted wiki folder is an empty one, not an error. `sync` clears the index and every reindex path recreates the folder. Left as an error, `walk` returned before `remove_missing` ran, so rows for vanished files survived forever and the launcher kept offering projects whose files were gone. |
+| 2026-08-24 | `/baton` writes silently. Typing it is the approval. **Supersedes** the 2026-08-22 rule that nothing is written without confirmation: a proposal-and-accept prompt at the end of every session is exactly the friction that kills the habit the whole design rests on, and the pages are markdown in a folder the user owns, so a wrong one is corrected by editing it. |
 | 2026-08-22 | Staleness is caught by free local checks. Contradiction detection needs a model and is deferred. |
 | 2026-08-22 | Humans may hand-edit any page. The agent preserves sections it does not understand. |
 | 2026-08-22 | Granularity: a page needs a title someone would plausibly search for. Smaller is a section. Over 300 words means the test was skipped. |
@@ -165,15 +168,22 @@ Resolve each before the phase it blocks, not before starting.
 
 1. **The design rests on one habit.** Forget `/baton` and that session is lost.
    Nothing runs in the background to catch it. Mitigation: show the last ingest date
-   per project in the launcher.
-2. **Page granularity.** Too fine gives orphans, too coarse gives one giant file. The
+   per project in the launcher. Anything that adds friction to running it — a
+   confirmation prompt, a progress report — attacks the one thing holding the design
+   up, which is why the skill now writes silently.
+2. **Silent writes can file a wrong fact.** The trade taken on 2026-08-24. Mitigations
+   that already exist: lint flags structural rot, the honesty rules forbid recording an
+   action as done that was not done, and `log.md` names every page touched so a bad
+   ingest is traceable. A page nobody would have approved is still a page anyone can
+   edit.
+3. **Page granularity.** Too fine gives orphans, too coarse gives one giant file. The
    rule in `AGENTS.md` is the only defence.
-3. **A central plaintext folder covering every project.** A written summary is far
+4. **A central plaintext folder covering every project.** A written summary is far
    less likely to contain a token than a raw transcript, but not zero.
-4. **The wiki becoming something you maintain.** The pattern works because the agent
+5. **The wiki becoming something you maintain.** The pattern works because the agent
    does the bookkeeping. Feeling obliged to tidy it yourself is the leading indicator
    of failure.
-5. **Lint cannot catch prose that is subtly wrong.** Only structural rot is free to
+6. **Lint cannot catch prose that is subtly wrong.** Only structural rot is free to
    detect. Some staleness is found by reading.
 
 ---

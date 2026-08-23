@@ -262,8 +262,8 @@ fn full_pages(heading: &str, note: &str, pages: &[&Page]) -> Vec<Block> {
         let title = if page.title.is_empty() { &page.id } else { &page.title };
         out.push(Block {
             text: format!(
-                "{lead}### {title}{status}\n_{}, updated {}_\n\n{}\n",
-                page.id, page.frontmatter.updated, body_without_title(page)
+                "{lead}### {title}{status}\n_updated {} · {}_\n\n{}\n",
+                page.frontmatter.updated, page.id, body_without_title(page)
             ),
             ids: vec![page.id.clone()],
             required: false,

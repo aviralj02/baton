@@ -57,6 +57,7 @@ fn is_relevant(path: &Path) -> bool {
 }
 
 fn reindex(app: &AppHandle, root: &Path) {
+    let _ = crate::onboarding::ensure_wiki(root);
     let db = app.state::<Db>();
     match db::sync(&db, root) {
         Ok(report) => {

@@ -77,6 +77,9 @@ pub enum Finding {
     MissingFromIndex,
     /// Over the schema's ceiling.
     TooLong { words: usize },
+    /// No `#` heading. Without one the launcher, the index and every brief fall
+    /// back to the file path, which reads as machinery rather than a claim.
+    NoTitle,
     /// A `[[wiki-link]]` pointing at a page that does not exist. Previously a
     /// `broken_links` command that nothing called, so the check never reached
     /// a reader; findings belong where the primer can carry them.
@@ -113,6 +116,9 @@ impl Finding {
             }
             Finding::BrokenLink { target } => {
                 format!("links to [[{target}]], which does not exist")
+            }
+            Finding::NoTitle => {
+                "has no `#` title line, so it is shown by its file path".into()
             }
         }
     }
@@ -227,6 +233,10 @@ pub fn check(pages: &[Page], indexed_ids: Option<&HashSet<String>>) -> Report {
             if !known_ids.contains(link.target.as_str()) {
                 add(&page.id, Finding::BrokenLink { target: link.target.clone() });
             }
+        }
+
+        if page.title.trim().is_empty() {
+            add(&page.id, Finding::NoTitle);
         }
 
         let words = page.body.split_whitespace().count();
@@ -414,6 +424,16 @@ mod tests {
     }
 
     #[test]
+    fn a_page_without_a_title_is_flagged() {
+        // Everything that shows a page falls back to its path without one.
+        let root = tmp("no-title");
+        let p = page(&root, "concepts/g",
+            &format!("{}## The constraint\n\na\n\n## The symptom\n\nb\n\n## The fix\n\nc\n", fm("gotcha", "current")));
+        let pages = vec![p];
+        assert!(check(&pages, Some(&all_indexed(&pages)))["concepts/g"].contains(&Finding::NoTitle));
+    }
+
+    #[test]
     fn an_attempt_may_not_be_current() {
         let root = tmp("attempt");
         let p = page(&root, "projects/baton/attempts/a",
@@ -504,6 +524,8 @@ mod tests {
         }
     }
 }
+
+
 
 
 

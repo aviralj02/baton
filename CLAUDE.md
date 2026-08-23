@@ -114,4 +114,9 @@ drops the index and rebuilds it from the files. `ensure_schema` also drops any t
   error.
 - **pnpm 11** approves build scripts via `allowBuilds:` in `pnpm-workspace.yaml`, not
   `onlyBuiltDependencies` and not the `pnpm` field in `package.json`.
+- **A missing wiki root is an empty one, not an error.** `wiki::walk` fails on a
+  deleted directory, and if `db::sync` propagates that it returns before
+  `remove_missing` runs — so every row for a vanished file survives and no later
+  sweep clears it. Every reindex path also calls `ensure_wiki`, so deleting the
+  folder gets you a fresh one rather than an app that quietly does nothing.
 - **Never hold the DB `Mutex` across a file read.**

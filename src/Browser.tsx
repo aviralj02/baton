@@ -134,7 +134,7 @@ export default function Browser() {
                   key={hit.id}
                   active={selectedId === hit.id}
                   onClick={() => void openPage(hit.id)}
-                  title={hit.title || hit.id}
+                  title={hit.title || readableId(hit.id)}
                   meta={
                     <span className="flex items-center gap-1.5">
                       {hit.type}
@@ -238,6 +238,17 @@ export default function Browser() {
       )}
     </div>
   );
+}
+
+/**
+ * A readable stand-in for a page with no title: its last path segment with the
+ * hyphens opened out. Pages should carry a `#` heading — lint flags the ones
+ * that do not — but a path in the sidebar is worse than an imperfect name.
+ */
+function readableId(id: string): string {
+  const last = id.split("/").pop() ?? id;
+  const words = last.replace(/[-_]/g, " ");
+  return words.charAt(0).toUpperCase() + words.slice(1);
 }
 
 function groupByProject(pages: PageHit[]): [string, PageHit[]][] {

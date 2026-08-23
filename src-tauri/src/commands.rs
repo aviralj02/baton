@@ -55,6 +55,7 @@ pub fn open_main_window(app: tauri::AppHandle) -> std::result::Result<(), String
 #[tauri::command]
 pub fn sync_wiki(app: tauri::AppHandle, db: State<'_, Db>) -> Result<db::IndexReport> {
     let root = crate::wiki_root(&app).map_err(db::DbError::Path)?;
+    let _ = crate::onboarding::ensure_wiki(&root);
     let report = db::sync(&db, &root)?;
     // Every other reindex path rewrites index.md; this one is invoked on every
     // summon and by Refresh, so leaving it out let the catalogue drift behind
@@ -72,6 +73,7 @@ pub fn sync_wiki(app: tauri::AppHandle, db: State<'_, Db>) -> Result<db::IndexRe
 #[tauri::command]
 pub fn rebuild_index(app: tauri::AppHandle, db: State<'_, Db>) -> Result<db::IndexReport> {
     let root = crate::wiki_root(&app).map_err(db::DbError::Path)?;
+    let _ = crate::onboarding::ensure_wiki(&root);
     with_conn(&db, db::delete_all)?;
     let report = db::sync(&db, &root)?;
     if let Err(e) = crate::index_md::regenerate(&root) {

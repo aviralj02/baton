@@ -75,6 +75,18 @@ fn blurb(page: &Page) -> String {
     }
 }
 
+/// A last-resort label for a page with no title: its final path segment, with
+/// hyphens opened out. `projects/baton/decisions/files-are-truth` becomes
+/// "Files are truth" — still not a sentence, but readable rather than a path.
+fn readable_id(id: &str) -> String {
+    let last = id.rsplit('/').next().unwrap_or(id).replace(['-', '_'], " ");
+    let mut c = last.chars();
+    match c.next() {
+        Some(f) => f.to_uppercase().collect::<String>() + c.as_str(),
+        None => last,
+    }
+}
+
 /// A marker for pages the reader should not treat as live.
 fn status_note(status: Status) -> &'static str {
     match status {
@@ -138,10 +150,18 @@ pub fn render(pages: &[Page]) -> String {
             }
             let note = status_note(page.frontmatter.status);
             let text = blurb(page);
-            if text.is_empty() {
-                out.push_str(&format!("- [[{}]]{note}\n", page.id));
+            // `[[id|Title]]` keeps the path as the link target while showing the
+            // claim. A bare `[[id]]` renders as machinery, and this file is read
+            // by a person deciding what already exists.
+            let label = if page.title.trim().is_empty() {
+                readable_id(&page.id)
             } else {
-                out.push_str(&format!("- [[{}]] — {text}{note}\n", page.id));
+                page.title.trim().to_string()
+            };
+            if text.is_empty() {
+                out.push_str(&format!("- [[{}|{label}]]{note}\n", page.id));
+            } else {
+                out.push_str(&format!("- [[{}|{label}]] — {text}{note}\n", page.id));
             }
         }
     }
@@ -214,8 +234,25 @@ mod tests {
             out.find("## baton").unwrap() < out.find("## Concepts").unwrap(),
             "concepts must sort after real projects"
         );
-        assert!(out.contains("[[projects/baton/overview]]"));
-        assert!(out.contains("[[concepts/appkit]]"));
+        // The link target is the id; what is shown is the title.
+        assert!(out.contains("[[projects/baton/overview|"));
+        assert!(out.contains("[[concepts/appkit|"));
+    }
+
+    #[test]
+    fn the_index_shows_titles_not_paths() {
+        let root = tmp("titles");
+        let out = render(&[page(&root, "projects/baton/overview", OVERVIEW)]);
+        assert!(
+            out.contains("[[projects/baton/overview|Baton]]"),
+            "the path is shown instead of the title: {out}"
+        );
+    }
+
+    #[test]
+    fn a_titleless_page_falls_back_to_a_readable_name() {
+        assert_eq!(readable_id("projects/baton/decisions/files-are-truth"), "Files are truth");
+        assert_eq!(readable_id("concepts/appkit_main_thread"), "Appkit main thread");
     }
 
     #[test]
@@ -230,7 +267,7 @@ mod tests {
         // The schema requires it, and the skill relies on it to avoid writing
         // a duplicate page.
         for p in &pages {
-            assert!(out.contains(&format!("[[{}]]", p.id)), "{} missing", p.id);
+            assert!(out.contains(&format!("[[{}|", p.id)), "{} missing", p.id);
         }
     }
 

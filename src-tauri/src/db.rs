@@ -229,7 +229,13 @@ pub fn sync(db: &Db, root: &Path) -> Result<IndexReport> {
     let mut parsed: Vec<(Page, FileStat)> = Vec::new();
     let mut seen: HashSet<String> = HashSet::new();
 
-    for path in wiki::walk(root)? {
+    let paths = match wiki::walk(root) {
+        Ok(paths) => paths,
+        Err(_) if !root.is_dir() => Vec::new(),
+        Err(e) => return Err(e.into()),
+    };
+
+    for path in paths {
         let id = wiki::page_id(root, &path)?;
         // Recorded before the stat, so a file that vanishes mid-sweep keeps its
         // rows rather than being treated as deleted.
@@ -771,6 +777,21 @@ mod tests {
             1,
             "one unreadable file must not blank the index"
         );
+    }
+
+    #[test]
+    fn deleting_the_wiki_folder_empties_the_index() {
+        let w = Fixture::new();
+        w.write("a", "current", "# A\n\n## Decision\n\nOne.\n");
+        w.sweep();
+        assert_eq!(w.read(|c| list_pages(c)).len(), 1);
+
+        std::fs::remove_dir_all(&w.root).unwrap();
+        let report = w.sweep();
+
+        assert_eq!(report.removed, 1, "the vanished page was not removed");
+        assert!(w.read(|c| list_pages(c)).is_empty());
+        assert!(w.read(|c| list_projects(c)).is_empty());
     }
 
     #[test]
