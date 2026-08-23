@@ -119,3 +119,21 @@ export const EMPTY_BODY: ContextBody = {
   openIssues: [],
   nextSteps: [],
 };
+
+/** First-run state — mirrors `onboarding::WikiStatus`. */
+export interface WikiStatus {
+  root: string;
+  rootExists: boolean;
+  hasSchema: boolean;
+  pageCount: number;
+  skills: SkillHost[];
+}
+
+export interface SkillHost {
+  name: string;
+  /** The tool's config directory exists on this machine. */
+  detected: boolean;
+  installed: boolean;
+  /** Installed, but differs from the version this build ships. */
+  outdated: boolean;
+}

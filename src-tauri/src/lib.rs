@@ -3,6 +3,7 @@ mod commands;
 mod context;
 mod db;
 mod launcher;
+mod onboarding;
 pub mod primer;
 mod tray;
 /// Public so the reader half of the wiki can be exercised before any command
@@ -117,6 +118,11 @@ pub fn run() {
             let handle = app.handle().clone();
             tauri::async_runtime::spawn_blocking(move || {
                 let swept = wiki_root(&handle).and_then(|root| {
+                    // First run: the folder is Baton's own data, so it is
+                    // created silently. The skill is not — that writes into
+                    // another tool's config and is offered in the UI instead.
+                    onboarding::ensure_wiki(&root)
+                        .map_err(|e| format!("could not create {}: {e}", root.display()))?;
                     let db = handle.state::<db::Db>();
                     db::sync(&db, &root).map_err(|e| e.to_string())
                 });
@@ -160,6 +166,9 @@ pub fn run() {
             commands::hide_launcher,
             commands::open_main_window,
             commands::sync_wiki,
+            commands::wiki_status,
+            commands::install_skills,
+            commands::reveal_wiki,
             commands::list_pages,
             commands::search_pages,
             commands::page_backlinks,

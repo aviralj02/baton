@@ -321,3 +321,40 @@ fn pick_name(name: String, body: &ContextBody) -> String {
         .filter(|s| !s.is_empty())
         .unwrap_or_else(|| "Untitled context".to_string())
 }
+
+// ------------------------------------------------------- first-run setup
+
+/// Whether the wiki and the `/baton` skill exist yet. Drives the setup screen.
+#[tauri::command]
+pub fn wiki_status(app: tauri::AppHandle) -> Result<crate::onboarding::WikiStatus> {
+    let root = crate::wiki_root(&app).map_err(db::DbError::Path)?;
+    let home = app
+        .path()
+        .home_dir()
+        .map_err(|e| db::DbError::Path(e.to_string()))?;
+    Ok(crate::onboarding::status(&root, &home))
+}
+
+/// Write the `/baton` skill into every detected agent tool.
+///
+/// Explicit action, never automatic: this writes into another tool's config
+/// directory, which is not ours to change on the user's behalf.
+#[tauri::command]
+pub fn install_skills(app: tauri::AppHandle) -> Result<Vec<String>> {
+    let home = app
+        .path()
+        .home_dir()
+        .map_err(|e| db::DbError::Path(e.to_string()))?;
+    crate::onboarding::install_skills(&home).map_err(|e| db::DbError::Path(e.to_string()))
+}
+
+/// Open the wiki folder in the file manager, so "where do my notes live?" has
+/// an answer that does not involve typing a path.
+#[tauri::command]
+pub fn reveal_wiki(app: tauri::AppHandle) -> Result<()> {
+    use tauri_plugin_opener::OpenerExt;
+    let root = crate::wiki_root(&app).map_err(db::DbError::Path)?;
+    app.opener()
+        .open_path(root.display().to_string(), None::<&str>)
+        .map_err(|e| db::DbError::Path(e.to_string()))
+}

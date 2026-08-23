@@ -4,6 +4,7 @@ import * as api from "./lib/api";
 import { relativeTime } from "./Launcher";
 import { ContextDetail } from "./components/ContextDetail";
 import { PageDetail } from "./components/PageDetail";
+import { Setup, useSetupGate } from "./components/Setup";
 import { PasteConversation } from "./components/PasteConversation";
 import { Logo } from "./components/Logo";
 import { Dot } from "./components/Dot";
@@ -26,6 +27,10 @@ export default function Browser() {
   const [query, setQuery] = useState("");
   const [toast, setToast] = useState<string | null>(null);
   const [confirmWipe, setConfirmWipe] = useState(false);
+  // A fresh install has no pages and no way to write one; setup is the only
+  // useful thing to show until the /baton command exists.
+  const setup = useSetupGate();
+  const [showSetup, setShowSetup] = useState(false);
   const [pasting, setPasting] = useState<
     null | { kind: "create" } | { kind: "update"; id: string; name: string }
   >(null);
@@ -92,6 +97,26 @@ export default function Browser() {
       : selected?.kind === "context"
         ? selected.context.id
         : null;
+
+  if ((setup.needed || showSetup) && setup.status) {
+    return (
+      <div className="flex h-screen w-screen flex-col bg-white text-neutral-900 dark:bg-neutral-900 dark:text-neutral-100">
+        <header
+          data-tauri-drag-region
+          className="h-11 shrink-0 border-b border-black/10 dark:border-white/10"
+        />
+        <Setup
+          status={setup.status}
+          onDone={() => {
+            setShowSetup(false);
+            setup.dismiss();
+            setup.refresh();
+            void reload(query);
+          }}
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="flex h-screen w-screen flex-col bg-white text-neutral-900 dark:bg-neutral-900 dark:text-neutral-100">

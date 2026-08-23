@@ -16,6 +16,7 @@ import type {
   Page,
   PageHit,
   Primer,
+  WikiStatus,
 } from "../types";
 
 export const listContexts = () => invoke<ContextSummary[]>("list_contexts");
@@ -100,3 +101,12 @@ export const updateFromConversation = (id: string, conversation: string) =>
 /** Write a continuation prompt for the next model, and copy it. */
 export const generateHandoff = (id: string) =>
   invoke<string>("generate_handoff", { id });
+
+// --- first-run setup ----------------------------------------------------
+
+export const wikiStatus = () => invoke<WikiStatus>("wiki_status");
+
+/** Writes the /baton skill into every detected agent tool. */
+export const installSkills = () => invoke<string[]>("install_skills");
+
+export const revealWiki = () => invoke<void>("reveal_wiki");
