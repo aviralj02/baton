@@ -4,6 +4,7 @@ mod context;
 mod db;
 mod index_md;
 mod launcher;
+mod lint;
 mod onboarding;
 pub mod primer;
 mod tray;

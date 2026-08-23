@@ -203,11 +203,16 @@ pub fn build_primer(app: tauri::AppHandle, project: Option<String>) -> Result<pr
         .or_else(|| primer::most_recent_project(&pages))
         .ok_or_else(|| db::DbError::NotFound("any project in the wiki".to_string()))?;
 
+    // Lint runs over the whole wiki, not just this project: a constraint page in
+    // concepts/ can be carried into any brief.
+    let lint = crate::lint::check(&pages, crate::lint::indexed_ids(&root).as_ref());
+
     Ok(primer::assemble(
         &pages,
         &project,
         PRIMER_BUDGET_TOKENS,
         chrono::Utc::now().date_naive(),
+        &lint,
     ))
 }
 

@@ -57,13 +57,24 @@ pub fn most_recent_project(pages: &[Page]) -> Option<String> {
 /// One candidate chunk of the brief, in priority order.
 struct Block {
     text: String,
+    /// Ids this block carries. Tracked explicitly rather than inferred from the
+    /// text: the project page renders as its sections and its id never appears,
+    /// so substring matching would silently never flag the page the brief leans
+    /// on hardest.
+    ids: Vec<String>,
     pages: usize,
     /// Included whether or not the budget allows. The goal and the next step
     /// are the two things a primer exists to carry.
     required: bool,
 }
 
-pub fn assemble(pages: &[Page], project: &str, budget_tokens: usize, today: NaiveDate) -> Primer {
+pub fn assemble(
+    pages: &[Page],
+    project: &str,
+    budget_tokens: usize,
+    today: NaiveDate,
+    lint: &crate::lint::Report,
+) -> Primer {
     let mine: Vec<&Page> = pages
         .iter()
         .filter(|p| p.frontmatter.project.as_deref() == Some(project))
@@ -80,6 +91,7 @@ pub fn assemble(pages: &[Page], project: &str, budget_tokens: usize, today: Naiv
 
     let mut blocks = vec![Block {
         text: header(project, mine.len() + concepts.len(), today),
+        ids: Vec::new(),
         pages: 0,
         required: true,
     }];
@@ -87,6 +99,7 @@ pub fn assemble(pages: &[Page], project: &str, budget_tokens: usize, today: Naiv
     if let Some(page) = overview {
         blocks.push(Block {
             text: format!("{}\n", page.body),
+            ids: vec![page.id.clone()],
             pages: 1,
             required: true,
         });
@@ -139,19 +152,28 @@ pub fn assemble(pages: &[Page], project: &str, budget_tokens: usize, today: Naiv
         };
         blocks.push(Block {
             text: format!("{heading}{}\n", page.body),
+            ids: vec![page.id.clone()],
             pages: 1,
             required: false,
         });
     }
 
-    fill(blocks, project, budget_tokens)
+    fill(blocks, project, budget_tokens, lint)
 }
 
 /// Take blocks in order until the budget runs out. A required block goes in
 /// whatever the budget says, and once one block is dropped the rest follow, so
 /// the brief never ends up with a low-priority page and no high-priority one.
-fn fill(blocks: Vec<Block>, project: &str, budget_tokens: usize) -> Primer {
+fn fill(
+    blocks: Vec<Block>,
+    project: &str,
+    budget_tokens: usize,
+    lint: &crate::lint::Report,
+) -> Primer {
     let mut text = String::new();
+    // Which pages reached the brief, so a warning never points at something the
+    // reader cannot see.
+    let mut shown: std::collections::HashSet<String> = std::collections::HashSet::new();
     let mut included = 0;
     let mut dropped = 0;
     let mut full = false;
@@ -165,6 +187,7 @@ fn fill(blocks: Vec<Block>, project: &str, budget_tokens: usize) -> Primer {
             text.push_str(&block.text);
             text.push('\n');
             included += block.pages;
+            shown.extend(block.ids.iter().cloned());
         } else {
             full = true;
             dropped += block.pages;
@@ -175,6 +198,25 @@ fn fill(blocks: Vec<Block>, project: &str, budget_tokens: usize) -> Primer {
         text.push_str(&format!(
             "\n({dropped} more page(s) left out to stay inside the token budget.)\n"
         ));
+    }
+
+    // Warnings go in the brief, not in a report nobody opens: the model reading
+    // this needs to know which lines to distrust.
+    let mut flagged: Vec<(&String, &Vec<crate::lint::Finding>)> =
+        lint.iter().filter(|(id, _)| shown.contains(*id)).collect();
+    flagged.sort_by_key(|(id, _)| id.as_str());
+
+    if !flagged.is_empty() {
+        text.push_str("\n## Stale, treat with care\n\n");
+        text.push_str(
+            "These pages are included above but failed a structural check. Prefer the \n\
+             repository over anything here that they contradict.\n\n",
+        );
+        for (id, findings) in flagged {
+            for f in findings {
+                text.push_str(&format!("- {id} {}\n", f.message()));
+            }
+        }
     }
 
     Primer {
@@ -201,7 +243,8 @@ fn summary_block(heading: &str, note: &str, pages: &[&Page], section: &str) -> B
     if pages.is_empty() {
         return Block {
             text: String::new(),
-            pages: 0,
+            ids: Vec::new(),
+        pages: 0,
             required: false,
         };
     }
@@ -225,6 +268,7 @@ fn summary_block(heading: &str, note: &str, pages: &[&Page], section: &str) -> B
 
     Block {
         text,
+        ids: pages.iter().map(|p| p.id.clone()).collect(),
         pages: pages.len(),
         required: false,
     }
@@ -422,7 +466,7 @@ mod tests {
 
     #[test]
     fn the_brief_leads_with_the_project_page_then_the_decisions() {
-        let p = assemble(&corpus(), "baton", 10_000, today());
+        let p = assemble(&corpus(), "baton", 10_000, today(), &Default::default());
 
         let goal = p.text.find("## Goal").expect("the goal must be carried");
         let decisions = p.text.find("## Decisions already taken").unwrap();
@@ -436,7 +480,7 @@ mod tests {
 
     #[test]
     fn a_superseded_decision_is_not_offered_as_current() {
-        let p = assemble(&corpus(), "baton", 10_000, today());
+        let p = assemble(&corpus(), "baton", 10_000, today(), &Default::default());
         assert!(p.text.contains("Markdown files are the source of truth"));
         assert!(
             !p.text.contains("- The content column holds JSON"),
@@ -446,14 +490,14 @@ mod tests {
 
     #[test]
     fn an_abandoned_route_is_carried_with_the_reason_it_failed() {
-        let p = assemble(&corpus(), "baton", 10_000, today());
+        let p = assemble(&corpus(), "baton", 10_000, today(), &Default::default());
         assert!(p.text.contains("Hosted proxy [superseded]"));
         assert!(p.text.contains("Every conversation would transit our infrastructure"));
     }
 
     #[test]
     fn concepts_are_included_even_though_they_belong_to_no_project() {
-        let p = assemble(&corpus(), "baton", 10_000, today());
+        let p = assemble(&corpus(), "baton", 10_000, today(), &Default::default());
         let summary = p
             .text
             .lines()
@@ -467,15 +511,15 @@ mod tests {
 
     #[test]
     fn a_page_the_overview_links_to_is_carried_whole() {
-        let p = assemble(&corpus(), "baton", 10_000, today());
+        let p = assemble(&corpus(), "baton", 10_000, today(), &Default::default());
         // The one-hop body, not just the one-line summary of the same page.
         assert!(p.text.contains("## The symptom"));
     }
 
     #[test]
     fn the_budget_drops_from_the_bottom_and_says_so() {
-        let full = assemble(&corpus(), "baton", 10_000, today());
-        let tight = assemble(&corpus(), "baton", 200, today());
+        let full = assemble(&corpus(), "baton", 10_000, today(), &Default::default());
+        let tight = assemble(&corpus(), "baton", 200, today(), &Default::default());
 
         assert!(tight.tokens < full.tokens);
         assert!(tight.pages_dropped > 0);
@@ -488,7 +532,7 @@ mod tests {
     #[test]
     fn an_empty_section_is_left_out_rather_than_left_blank() {
         let only_overview = vec![corpus().remove(0)];
-        let p = assemble(&only_overview, "baton", 10_000, today());
+        let p = assemble(&only_overview, "baton", 10_000, today(), &Default::default());
         assert!(p.text.contains("## Goal"));
         assert!(!p.text.contains("## Open questions"));
         assert!(!p.text.contains("## Routes already tried"));
@@ -509,7 +553,7 @@ mod tests {
              ## Why\n\nNothing needs inference.\n\n## Rejected\n\nA hosted proxy.\n",
         )];
 
-        let p = assemble(&wrapped, "baton", 10_000, today());
+        let p = assemble(&wrapped, "baton", 10_000, today(), &Default::default());
         let summary = p
             .text
             .lines()
@@ -530,6 +574,45 @@ mod tests {
             ["Pinned to reqwest 0.13 and rustls.", " Then it built."]
         );
         assert_eq!(split_sentences("No punctuation here"), ["No punctuation here"]);
+    }
+
+    #[test]
+    fn a_brief_carrying_a_flagged_page_says_so_in_its_own_text() {
+        // The point of the phase: a warning inside the brief, so the model
+        // reading it knows which lines to distrust.
+        let pages = corpus();
+        let flagged = pages
+            .iter()
+            .find(|p| p.frontmatter.page_type == PageType::Project)
+            .expect("corpus has an overview")
+            .id
+            .clone();
+        let mut lint = crate::lint::Report::new();
+        lint.insert(flagged.clone(), vec![crate::lint::Finding::TooLong { words: 412 }]);
+
+        let p = assemble(&pages, "baton", 10_000, today(), &lint);
+        assert!(p.text.contains("## Stale, treat with care"), "{}", p.text);
+        assert!(p.text.contains(&flagged), "the flagged page is not named");
+        assert!(p.text.contains("412 words"), "the reason is not given");
+    }
+
+    #[test]
+    fn a_clean_wiki_gets_no_warning_section() {
+        // Otherwise every brief carries an empty scary heading.
+        let p = assemble(&corpus(), "baton", 10_000, today(), &Default::default());
+        assert!(!p.text.contains("Stale, treat with care"));
+    }
+
+    #[test]
+    fn a_warning_about_a_page_that_was_dropped_is_not_shown() {
+        // Warning about a page the reader cannot see is noise.
+        let mut lint = crate::lint::Report::new();
+        lint.insert(
+            "projects/baton/not-in-this-brief".to_string(),
+            vec![crate::lint::Finding::Orphan],
+        );
+        let p = assemble(&corpus(), "baton", 10_000, today(), &lint);
+        assert!(!p.text.contains("not-in-this-brief"));
     }
 
     #[test]
