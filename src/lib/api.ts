@@ -90,6 +90,13 @@ export const copyPage = (id: string) => invoke<string>("copy_page", { id });
  */
 export const onLauncherShown = (fn: () => void) => listen("launcher-shown", fn);
 
+/**
+ * Fires after the wiki folder changed on disk and was reindexed. Windows
+ * refresh from this rather than polling — an agent writing pages mid-session
+ * should show up without a restart.
+ */
+export const onWikiChanged = (fn: () => void) => listen("wiki-changed", fn);
+
 /** Extract a structured context from a pasted conversation, and save it. */
 export const createFromConversation = (name: string, conversation: string) =>
   invoke<Context>("create_context_from_conversation", { name, conversation });

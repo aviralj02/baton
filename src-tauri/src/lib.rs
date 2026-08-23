@@ -2,10 +2,12 @@ mod ai;
 mod commands;
 mod context;
 mod db;
+mod index_md;
 mod launcher;
 mod onboarding;
 pub mod primer;
 mod tray;
+mod watcher;
 /// Public so the reader half of the wiki can be exercised before any command
 /// wires it up.
 pub mod wiki;
@@ -126,6 +128,17 @@ pub fn run() {
                     let db = handle.state::<db::Db>();
                     db::sync(&db, &root).map_err(|e| e.to_string())
                 });
+                // The watcher is spawned regardless of how the first sweep
+                // went. A transient failure — a locked database, a path that is
+                // not ready yet — used to leave the app running the whole
+                // session with no watcher and no index regeneration, silently.
+                if let Ok(root) = wiki_root(&handle) {
+                    if let Err(e) = index_md::regenerate(&root) {
+                        eprintln!("[baton] could not rewrite index.md: {e}");
+                    }
+                    watcher::spawn(&handle, root);
+                }
+
                 match swept {
                     Ok(report) => {
                         for error in &report.errors {

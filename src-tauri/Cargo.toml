@@ -34,6 +34,8 @@ thiserror = "2.0.20"
 keyring = "4.1.6"
 reqwest = { version = "0.13.4", features = ["json"] }
 window-vibrancy = "0.8.0"
+notify = "8.2.0"
+notify-debouncer-full = "0.7.0"
 
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
 tauri-plugin-single-instance = "2.4.3"

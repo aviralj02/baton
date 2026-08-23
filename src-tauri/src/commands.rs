@@ -118,7 +118,14 @@ pub fn open_main_window(app: tauri::AppHandle) -> std::result::Result<(), String
 #[tauri::command]
 pub fn sync_wiki(app: tauri::AppHandle, db: State<'_, Db>) -> Result<db::IndexReport> {
     let root = crate::wiki_root(&app).map_err(db::DbError::Path)?;
-    db::sync(&db, &root)
+    let report = db::sync(&db, &root)?;
+    // Every reindex path rewrites index.md. Leaving it out of this one let the
+    // catalogue drift behind the tree, and the skill trusts Baton to keep it
+    // current.
+    if let Err(e) = crate::index_md::regenerate(&root) {
+        eprintln!("[baton] could not rewrite index.md: {e}");
+    }
+    Ok(report)
 }
 
 #[tauri::command]

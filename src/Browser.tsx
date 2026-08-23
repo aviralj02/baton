@@ -54,6 +54,12 @@ export default function Browser() {
     return () => clearTimeout(t);
   }, [query, reload]);
 
+  // Reflect edits made in an external editor without a restart.
+  useEffect(() => {
+    const un = api.onWikiChanged(() => void reload(query));
+    return () => void un.then((f) => f());
+  }, [query, reload]);
+
   useEffect(() => {
     if (toast) {
       const t = setTimeout(() => setToast(null), 2000);

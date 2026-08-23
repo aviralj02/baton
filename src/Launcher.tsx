@@ -54,6 +54,13 @@ export default function Launcher() {
     return () => clearTimeout(t);
   }, [query, reload]);
 
+  // The agent writes pages while the user is still in a session; without this
+  // the launcher shows a stale list until the app restarts.
+  useEffect(() => {
+    const un = api.onWikiChanged(() => void reload(query));
+    return () => void un.then((f) => f());
+  }, [query, reload]);
+
   useEffect(() => {
     queryRef.current = query;
   }, [query]);
