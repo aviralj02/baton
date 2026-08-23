@@ -1,57 +1,123 @@
-# Baton
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/logo-dark.svg">
+    <img src="assets/logo-light.svg" alt="Baton" width="76" height="76">
+  </picture>
+</p>
 
-A local-first context layer for AI-assisted development. Capture what you're
-working on once, then hand it off to any AI tool — Claude, ChatGPT, Codex,
-Cursor, Gemini — without re-explaining yourself.
+<h1 align="center">Baton</h1>
 
-*Your context, independent of the AI you're using.*
+<p align="center">
+  <b>Your context, independent of the AI you're using.</b><br>
+  A local-first memory layer for AI-assisted development.
+</p>
 
-**Platforms:** macOS + Windows · **Stack:** Tauri v2 + React + Rust
+<p align="center">
+  macOS &amp; Windows · Tauri + Rust · No account, no cloud, no API key
+</p>
 
-## Getting started
+<!-- TODO on first release: uncomment, and point at the real URLs.
+<p align="center">
+  <a href="https://github.com/aviralj02/baton/releases/latest"><img alt="Release" src="https://img.shields.io/github/v/release/aviralj02/baton"></a>
+  <a href="LICENSE"><img alt="License" src="https://img.shields.io/github/license/aviralj02/baton"></a>
+  <a href="https://github.com/aviralj02/baton/actions"><img alt="CI" src="https://img.shields.io/github/actions/workflow/status/aviralj02/baton/ci.yml"></a>
+</p>
+-->
 
-```bash
-pnpm install
-pnpm install-baton     # installs the /baton command and creates ~/Baton
-pnpm tauri dev
+---
+
+## 🧩 The problem
+
+You spend an hour with an AI getting somewhere real. It learns your constraints,
+what you ruled out, what already failed.
+
+Then the chat ends. Open a new one — or a different tool — and you start from
+nothing. So you re-explain the goal, re-paste the files, and watch it suggest
+the exact approach you abandoned yesterday.
+
+**The context died with the conversation. Baton keeps it.**
+
+## ⚡ How it works
+
+```
+   work with your agent  ──▶  /baton  ──▶  ~/Baton/*.md
+                                              │
+   new chat, any tool    ◀──  ⌘⇧Space  ◀──────┘
 ```
 
-The window starts hidden. Summon it with `⌘⇧Space` (macOS) or `Ctrl⇧Space`
-(Windows), or from the tray icon.
+**1. Your agent writes it.** Finish a session, run `/baton`. The agent that did
+the work files what it learned as markdown — decisions with their rejected
+alternatives, approaches that failed, constraints that bit you.
 
-> If `cargo` isn't found, run `source "$HOME/.cargo/env"` first, or add it to
-> your shell profile.
+**2. Baton indexes it.** Plain files in `~/Baton/`. You own them, you can edit
+them, they work with git.
 
-## How it works
+**3. One key gets it back.** Press `⌘⇧Space`, pick a project, hit enter. Its
+entire context is on your clipboard. Paste into Claude, ChatGPT, Cursor, Codex,
+anything.
 
-Baton reads a wiki of markdown files at `~/Baton/`. The files are the source of
-truth. SQLite is only a search index over them and can be deleted at any time.
+Baton **never calls a model.** It has no API key and makes no network requests.
+Your agent does the writing; Baton does the remembering.
 
-Pages are written by the agent that did the work. At the end of a session you
-run `/baton`, the agent proposes page edits, and you approve them. Baton itself
-never calls a model.
+## 🚀 Get started
 
-`pnpm install-baton` is what makes that command exist. It copies
-`skills/baton/SKILL.md` into the skills directory of every agent tool it finds
-(`~/.claude`, `~/.codex`, `~/.cursor`), creates `~/Baton/` if it is missing, and
-seeds `~/Baton/AGENTS.md` with the page schema.
+### Download
 
-The command has to be installed at user level rather than checked in at
-`.claude/skills/`, because you run it in whatever repo the session was about,
-not in this one.
+**Coming soon.** Signed builds for macOS and Windows are not out yet.
 
-Two things to know:
+<!-- TODO on first release: replace the line above with this.
+| macOS | Windows |
+|---|---|
+| [Apple silicon](TODO) · [Intel](TODO) | [Installer](TODO) |
 
-- **`skills/` in this repo is canonical.** The installer overwrites the copies
-  in your home directory on every run, so editing one of those loses the edit.
-- **`~/Baton/AGENTS.md` is never overwritten.** It is the contract every
-  existing page was written against, and it is meant to be edited as the schema
-  is repaired. Delete it if you want the installer to reseed it.
+Then run `/baton` once in any project to finish setup.
+-->
 
-`git init ~/Baton` is worth doing for history and undo. It needs no remote.
+### Build from source
 
-## Docs
+Works today and takes about a minute — see
+**[docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)**.
 
-- **[docs/PLAN.md](docs/PLAN.md)** — the plan of record: phases, decisions, what is next
-- **[CLAUDE.md](CLAUDE.md)** — architecture rules and gotchas for AI coding sessions
-- **[docs/PLAN.md](docs/PLAN.md)** — the live phase plan and decision log
+Once it is running, press `⌘⇧Space` (or `Ctrl⇧Space` on Windows) from anywhere.
+
+## 📓 Daily use
+
+| Action | How |
+|---|---|
+| File what a session learned | `/baton` in your agent |
+| Get a project's context | `⌘⇧Space` → pick → `↵` |
+| Read or edit a page | Open the main window, or just edit the markdown |
+
+### 💡 Make it automatic
+
+The one habit Baton depends on is running `/baton`. Put a line in your project's
+agent instructions so it happens without you remembering:
+
+```markdown
+<!-- CLAUDE.md, AGENTS.md, or .cursor/rules -->
+Run /baton after finishing a meaningful piece of work,
+or every few commands during a long session.
+```
+
+Now every session leaves the next one better informed.
+
+## 🔒 What it doesn't do
+
+No accounts. No cloud sync. No telemetry. No model calls. Nothing leaves your
+machine — the wiki is a folder you can read, grep, and delete.
+
+## 📚 Docs
+
+| | |
+|---|---|
+| [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) | Build it, hack on it, how the pieces fit |
+| [docs/PLAN.md](docs/PLAN.md) | Phases, decisions, what's next |
+| [CLAUDE.md](CLAUDE.md) | Rules and gotchas for AI coding sessions |
+
+## 🛠️ Status
+
+Working and used daily, but pre-release: not code-signed, no installer, and
+Windows has not had a real test pass yet. Issues and PRs welcome.
+
+<!-- TODO on first release: swap the paragraph above for a short one-liner, add
+     a LICENSE file and link it, and uncomment the badges at the top. -->
