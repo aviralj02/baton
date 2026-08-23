@@ -365,16 +365,6 @@ const HIT_COLUMNS: &str = "p.id, p.path, p.title, p.type, p.project, p.status, p
 
 /// One row per project, for the launcher.
 ///
-/// Projects, most recently touched first.
-#[derive(Debug, Clone, serde::Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct BrokenLink {
-    pub src: String,
-    pub dst: String,
-}
-
-/// One row per project, for the launcher.
-///
 /// The launcher deals in projects, not pages. A project's pages are an
 /// organisational detail of the wiki folder; what a user summons Baton for is
 /// "give me everything about X", and splitting that across eight rows makes the
@@ -526,24 +516,6 @@ pub fn backlinks(conn: &Connection, id: &str) -> Result<Vec<PageHit>> {
     Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
 }
 
-/// Links that name a page which does not exist.
-pub fn broken_links(conn: &Connection) -> Result<Vec<BrokenLink>> {
-    let mut stmt = conn.prepare(
-        "SELECT l.src, l.dst
-         FROM links l
-         LEFT JOIN pages p ON p.id = l.dst
-         WHERE p.id IS NULL
-         ORDER BY l.src, l.dst",
-    )?;
-    let rows = stmt.query_map([], |row| {
-        Ok(BrokenLink {
-            src: row.get(0)?,
-            dst: row.get(1)?,
-        })
-    })?;
-    Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -649,7 +621,9 @@ mod tests {
             }
         }
 
-fn write_as(&self, id: &str, page_type: &str, project: &str, body: &str) {
+        /// Write a page with an explicit type and project — the plain `write`
+        /// hardcodes `decision`/`baton`, which cannot express a project row.
+        fn write_as(&self, id: &str, page_type: &str, project: &str, body: &str) {
             let path = self.root.join(format!("{id}.md"));
             std::fs::create_dir_all(path.parent().unwrap()).unwrap();
             std::fs::write(
@@ -823,7 +797,28 @@ fn write_as(&self, id: &str, page_type: &str, project: &str, body: &str) {
         );
     }
 
-fn projects_group_their_pages_into_one_row() {
+    #[test]
+    fn search_ranks_a_live_page_above_the_one_it_replaced() {
+        let w = Fixture::new();
+        w.write(
+            "old",
+            "superseded",
+            "# Old\n\n## Decision\n\nThe content column holds JSON, not markdown.\n",
+        );
+        w.write(
+            "new",
+            "current",
+            "# New\n\n## Decision\n\nMarkdown files are the truth. JSON is gone.\n",
+        );
+        w.sweep();
+
+        let hits = w.read(|c| search_pages(c, "json"));
+        assert_eq!(hits.len(), 2);
+        assert_eq!(hits[0].id, "new", "a superseded page outranked the live one");
+    }
+
+    #[test]
+    fn projects_group_their_pages_into_one_row() {
         let w = Fixture::new();
         w.write_as("projects/baton/overview", "project", "baton",
             "# Baton\n\n## Goal\n\nA launcher.\n\n## Current state\n\nx\n\n## Next step\n\ny\n");
@@ -839,7 +834,8 @@ fn projects_group_their_pages_into_one_row() {
         assert_eq!(rows[0].title, "Baton");
     }
 
-fn a_project_with_no_overview_falls_back_to_its_slug() {
+    #[test]
+    fn a_project_with_no_overview_falls_back_to_its_slug() {
         let w = Fixture::new();
         w.write_as("projects/orphaned/decisions/d", "decision", "orphaned",
             "# A decision\n\n## Decision\n\nx\n\n## Why\n\ny\n\n## Rejected\n\nz\n");
@@ -848,7 +844,8 @@ fn a_project_with_no_overview_falls_back_to_its_slug() {
         assert_eq!(rows[0].title, "orphaned");
     }
 
-fn search_matches_the_project_name_or_a_page_title() {
+    #[test]
+    fn search_matches_the_project_name_or_a_page_title() {
         let w = Fixture::new();
         w.write_as("projects/baton/overview", "project", "baton",
             "# Baton\n\n## Goal\n\nx\n\n## Current state\n\ny\n\n## Next step\n\nz\n");
@@ -873,7 +870,8 @@ fn search_matches_the_project_name_or_a_page_title() {
         assert_eq!(w.read(|c| search_projects(c, "  ")).len(), 2);
     }
 
-fn search_does_not_match_on_body_text() {
+    #[test]
+    fn search_does_not_match_on_body_text() {
         // Matching a word buried in one page would surface the whole project,
         // which reads as a false positive when the row shown is the project.
         let w = Fixture::new();
@@ -883,7 +881,8 @@ fn search_does_not_match_on_body_text() {
         assert!(w.read(|c| search_projects(c, "kubernetes")).is_empty());
     }
 
-fn concepts_pages_are_not_a_project_row() {
+    #[test]
+    fn concepts_pages_are_not_a_project_row() {
         // They belong to no project on purpose, and are folded into every
         // brief rather than standing alone in the list.
         let w = Fixture::new();
@@ -891,26 +890,6 @@ fn concepts_pages_are_not_a_project_row() {
             "# G\n\n## The constraint\n\na\n\n## The symptom\n\nb\n\n## The fix\n\nc\n");
         w.sweep();
         assert!(w.read(|c| list_projects(c)).is_empty());
-    }
-
-    #[test]
-    fn search_ranks_a_live_page_above_the_one_it_replaced() {
-        let w = Fixture::new();
-        w.write(
-            "old",
-            "superseded",
-            "# Old\n\n## Decision\n\nThe content column holds JSON, not markdown.\n",
-        );
-        w.write(
-            "new",
-            "current",
-            "# New\n\n## Decision\n\nMarkdown files are the truth. JSON is gone.\n",
-        );
-        w.sweep();
-
-        let hits = w.read(|c| search_pages(c, "json"));
-        assert_eq!(hits.len(), 2);
-        assert_eq!(hits[0].id, "new", "a superseded page outranked the live one");
     }
 
     #[test]

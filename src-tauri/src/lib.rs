@@ -109,8 +109,8 @@ pub fn run() {
                     db::sync(&db, &root).map_err(|e| e.to_string())
                 });
                 // The watcher is spawned regardless of how the first sweep
-                // went. A transient failure — a locked database, a path that is
-                // not ready yet — used to leave the app running the whole
+                // went. A transient failure — a locked database, a path that
+                // is not ready yet — used to leave the app running the whole
                 // session with no watcher and no index regeneration, silently.
                 if let Ok(root) = wiki_root(&handle) {
                     if let Err(e) = index_md::regenerate(&root) {
@@ -124,6 +124,9 @@ pub fn run() {
                         for error in &report.errors {
                             eprintln!("[baton] wiki page skipped: {error}");
                         }
+                        // Only watch once the first index succeeded — watching a
+                        // folder we could not read would emit change events
+                        // against an index that was never built.
                     }
                     Err(e) => eprintln!("[baton] wiki sync failed: {e}"),
                 }
@@ -151,6 +154,7 @@ pub fn run() {
             commands::hide_launcher,
             commands::open_main_window,
             commands::sync_wiki,
+            commands::rebuild_index,
             commands::wiki_status,
             commands::install_skills,
             commands::reveal_wiki,
@@ -159,10 +163,8 @@ pub fn run() {
             commands::list_pages,
             commands::search_pages,
             commands::page_backlinks,
-            commands::broken_links,
             commands::read_page,
             commands::copy_page,
-            commands::build_primer,
             commands::copy_primer,
         ])
         .run(tauri::generate_context!())

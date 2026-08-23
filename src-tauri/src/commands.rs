@@ -7,6 +7,7 @@ use crate::db::{self, Db, Result};
 use crate::primer;
 use crate::wiki;
 
+/// Run a closure with the index connection held.
 fn with_conn<T>(db: &Db, f: impl FnOnce(&rusqlite::Connection) -> Result<T>) -> Result<T> {
     // A poisoned lock means another command panicked mid-write. Recover the
     // guard rather than cascading the panic through every later command.
@@ -55,9 +56,24 @@ pub fn open_main_window(app: tauri::AppHandle) -> std::result::Result<(), String
 pub fn sync_wiki(app: tauri::AppHandle, db: State<'_, Db>) -> Result<db::IndexReport> {
     let root = crate::wiki_root(&app).map_err(db::DbError::Path)?;
     let report = db::sync(&db, &root)?;
-    // Every reindex path rewrites index.md. Leaving it out of this one let the
-    // catalogue drift behind the tree, and the skill trusts Baton to keep it
-    // current.
+    // Every other reindex path rewrites index.md; this one is invoked on every
+    // summon and by Refresh, so leaving it out let the catalogue drift behind
+    // the tree — and the skill now trusts Baton to keep it current.
+    if let Err(e) = crate::index_md::regenerate(&root) {
+        eprintln!("[baton] could not rewrite index.md: {e}");
+    }
+    Ok(report)
+}
+
+/// Drop the index and rebuild it from the files.
+///
+/// Not a delete: the markdown under `~/Baton` is the source of truth and is
+/// never touched. This exists for the case where the index itself is suspect.
+#[tauri::command]
+pub fn rebuild_index(app: tauri::AppHandle, db: State<'_, Db>) -> Result<db::IndexReport> {
+    let root = crate::wiki_root(&app).map_err(db::DbError::Path)?;
+    with_conn(&db, db::delete_all)?;
+    let report = db::sync(&db, &root)?;
     if let Err(e) = crate::index_md::regenerate(&root) {
         eprintln!("[baton] could not rewrite index.md: {e}");
     }
@@ -90,12 +106,6 @@ pub fn search_pages(db: State<'_, Db>, query: String) -> Result<Vec<db::PageHit>
 #[tauri::command]
 pub fn page_backlinks(db: State<'_, Db>, id: String) -> Result<Vec<db::PageHit>> {
     with_conn(&db, |c| db::backlinks(c, &id))
-}
-
-/// Links that name a page which does not exist. The wiki's own lint.
-#[tauri::command]
-pub fn broken_links(db: State<'_, Db>) -> Result<Vec<db::BrokenLink>> {
-    with_conn(&db, db::broken_links)
 }
 
 /// One page, read from the file rather than from the index. The index is for
@@ -131,11 +141,9 @@ fn page_file(root: &std::path::Path, id: &str) -> Result<std::path::PathBuf> {
 /// for the budget to bite.
 const PRIMER_BUDGET_TOKENS: usize = 12_000;
 
-/// Compose the brief without copying it, so the launcher can show the estimate
-/// before the user commits to a paste. Reading and parsing the whole wiki takes
-/// well under a millisecond, so this runs on every summon.
-#[tauri::command]
-pub fn build_primer(app: tauri::AppHandle, project: Option<String>) -> Result<primer::Primer> {
+/// Compose the brief. Not a command: the launcher copies rather than previews,
+/// so `copy_primer` is the only caller.
+fn build_primer(app: tauri::AppHandle, project: Option<String>) -> Result<primer::Primer> {
     let root = crate::wiki_root(&app).map_err(db::DbError::Path)?;
 
     // A page that will not parse is left out rather than failing the brief.
@@ -151,7 +159,7 @@ pub fn build_primer(app: tauri::AppHandle, project: Option<String>) -> Result<pr
         .or_else(|| primer::most_recent_project(&pages))
         .ok_or_else(|| db::DbError::NotFound("any project in the wiki".to_string()))?;
 
-    // Lint runs over the whole wiki, not just this project: a constraint page in
+    // Lint runs over the whole wiki, not just this project: a gotcha page in
     // concepts/ can be carried into any brief.
     let lint = crate::lint::check(&pages, crate::lint::indexed_ids(&root).as_ref());
 
@@ -173,6 +181,7 @@ pub fn copy_primer(app: tauri::AppHandle, project: Option<String>) -> Result<pri
         .map_err(|e| db::DbError::Clipboard(e.to_string()))?;
     Ok(primer)
 }
+
 
 // ------------------------------------------------------- first-run setup
 

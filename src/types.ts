@@ -74,11 +74,6 @@ export interface Primer {
   pagesDropped: number;
 }
 
-export interface BrokenLink {
-  src: string;
-  dst: string;
-}
-
 /** First-run state — mirrors `onboarding::WikiStatus`. */
 export interface WikiStatus {
   root: string;

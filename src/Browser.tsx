@@ -16,6 +16,7 @@ export default function Browser() {
   const [selected, setSelected] = useState<Selection>(null);
   const [query, setQuery] = useState("");
   const [toast, setToast] = useState<string | null>(null);
+  const [confirmWipe, setConfirmWipe] = useState(false);
   // A fresh install has no pages and no way to write one; setup is the only
   // useful thing to show until the /baton command exists.
   const setup = useSetupGate();
@@ -147,6 +148,54 @@ export default function Browser() {
             </ProjectGroup>
           ))}
 
+          <div className="mt-4 border-t border-black/10 pt-3 dark:border-white/10">
+            {confirmWipe ? (
+              <div className="px-1">
+                <p className="text-[11px] text-neutral-500 dark:text-neutral-400">
+                  Rebuild the search index from the files in ~/Baton? Nothing is
+                  deleted — the markdown is the source of truth and the index is
+                  derived from it.
+                </p>
+                <div className="mt-2 flex gap-2">
+                  <button
+                    onClick={async () => {
+                      try {
+                        setSelected(null);
+                        setConfirmWipe(false);
+                        // Actually drops the index and re-reads every file. The
+                        // previous version only re-swept and still reported a
+                        // deletion, which was a false claim about a privacy
+                        // action.
+                        const report = await api.rebuildIndex();
+                        await reload(query);
+                        setToast(`Index rebuilt from ${report.indexed} pages`);
+                      } catch (e) {
+                        setToast(String(e));
+                      }
+                    }}
+                    className="cursor-pointer rounded bg-neutral-900 px-2 py-1 text-[11px] font-medium text-white transition-all duration-150 hover:bg-neutral-700 active:scale-[0.98] dark:bg-white dark:text-neutral-900 dark:hover:bg-neutral-200"
+                  >
+                    Rebuild
+                  </button>
+                  <button
+                    onClick={() => setConfirmWipe(false)}
+                    className="cursor-pointer px-1 text-[11px] text-neutral-500 transition-all duration-150 hover:underline"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            ) : (
+              // Not a delete: there is no local data beyond the index, and the
+              // index is derived from files the app never writes.
+              <button
+                onClick={() => setConfirmWipe(true)}
+                className="cursor-pointer px-1.5 text-[11px] text-neutral-400 transition-all duration-150 hover:text-neutral-600 dark:hover:text-neutral-200"
+              >
+                Rebuild index…
+              </button>
+            )}
+          </div>
         </aside>
 
         <main className="min-w-0 flex-1">

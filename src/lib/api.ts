@@ -8,7 +8,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import type {
-  BrokenLink,
   IndexReport,
   Page,
   PageHit,
@@ -27,6 +26,9 @@ export const openMainWindow = () => invoke<void>("open_main_window");
  * Bring the index in line with the files under ~/Baton. Cheap to call: the
  * sweep skips every file whose mtime and size match the indexed row.
  */
+/** Clears the index and rebuilds it from the files. Never touches the files. */
+export const rebuildIndex = () => invoke<IndexReport>("rebuild_index");
+
 export const syncWiki = () => invoke<IndexReport>("sync_wiki");
 
 /**
@@ -49,18 +51,8 @@ export const searchPages = (query: string) =>
 export const pageBacklinks = (id: string) =>
   invoke<PageHit[]>("page_backlinks", { id });
 
-/** Links that name a page which does not exist. */
-export const brokenLinks = () => invoke<BrokenLink[]>("broken_links");
-
 /** The page itself, read from the file rather than from the index. */
 export const readPage = (id: string) => invoke<Page>("read_page", { id });
-
-/**
- * The whole project brief, composed from several pages. Cheap enough to rebuild
- * on every summon, so the launcher can show the estimate before copying.
- */
-export const buildPrimer = (project?: string) =>
-  invoke<Primer>("build_primer", { project: project ?? null });
 
 /** Puts the brief on the clipboard and returns it. */
 export const copyPrimer = (project?: string) =>
@@ -91,3 +83,4 @@ export const wikiStatus = () => invoke<WikiStatus>("wiki_status");
 export const installSkills = () => invoke<string[]>("install_skills");
 
 export const revealWiki = () => invoke<void>("reveal_wiki");
+
