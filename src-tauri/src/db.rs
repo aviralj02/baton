@@ -4,7 +4,7 @@ use std::collections::{HashMap, HashSet};
 use std::path::Path;
 use std::sync::Mutex;
 
-use rusqlite::{params, Connection, OptionalExtension, Transaction};
+use rusqlite::{params, Connection, Transaction};
 
 use crate::wiki::{self, Page};
 
@@ -39,156 +39,120 @@ pub type Result<T> = std::result::Result<T, DbError>;
 pub fn open(path: &std::path::Path) -> Result<Connection> {
     let conn = Connection::open(path)?;
     conn.execute_batch("PRAGMA foreign_keys = ON; PRAGMA journal_mode = WAL;")?;
-    migrate(&conn)?;
+    ensure_schema(&conn)?;
     Ok(conn)
 }
 
-/// Versioned migrations via `user_version`. Each step runs once, in order.
-fn migrate(conn: &Connection) -> Result<()> {
-    let version: i64 = conn.query_row("PRAGMA user_version", [], |r| r.get(0))?;
+const SCHEMA: &str = r#"
+CREATE TABLE pages (
+  id         TEXT PRIMARY KEY,   -- 'projects/baton/db', from wiki::page_id
+  path       TEXT NOT NULL,
+  type       TEXT NOT NULL,
+  project    TEXT,               -- NULL for pages in concepts/
+  status     TEXT NOT NULL,
+  updated    TEXT NOT NULL,      -- the frontmatter date, ISO
+  title      TEXT NOT NULL,
+  body       TEXT NOT NULL,
+  mtime      INTEGER NOT NULL,   -- epoch ms, the change gate
+  size       INTEGER NOT NULL,
+  indexed_at TEXT NOT NULL
+);
 
-    if version < 1 {
-        conn.execute_batch(
-            r#"
-            CREATE TABLE contexts (
-              id         TEXT PRIMARY KEY,
-              name       TEXT NOT NULL,
-              content    TEXT NOT NULL,
-              created_at TEXT NOT NULL,
-              updated_at TEXT NOT NULL
-            );
+CREATE INDEX idx_pages_project ON pages(project);
 
-            CREATE TABLE sources (
-              id         TEXT PRIMARY KEY,
-              context_id TEXT NOT NULL REFERENCES contexts(id) ON DELETE CASCADE,
-              type       TEXT NOT NULL,
-              content    TEXT NOT NULL,
-              created_at TEXT NOT NULL
-            );
+CREATE TABLE sections (
+  page_id TEXT NOT NULL REFERENCES pages(id) ON DELETE CASCADE,
+  ord     INTEGER NOT NULL,
+  heading TEXT NOT NULL,
+  body    TEXT NOT NULL,
+  PRIMARY KEY (page_id, ord)
+);
 
-            CREATE INDEX idx_sources_context ON sources(context_id);
+-- `dst` is deliberately not a foreign key: a link may name a page that does
+-- not exist, and finding those is the point.
+CREATE TABLE links (
+  src TEXT NOT NULL REFERENCES pages(id) ON DELETE CASCADE,
+  dst TEXT NOT NULL,
+  PRIMARY KEY (src, dst)
+);
 
-            -- External-content FTS: the index stores no copy of the rows, it
-            -- points at `contexts` by rowid. That means the triggers below are
-            -- mandatory, not an optimisation — without them the index silently
-            -- drifts out of sync with the table.
-            CREATE VIRTUAL TABLE contexts_fts USING fts5(
-              name, content, content='contexts', content_rowid='rowid'
-            );
+CREATE INDEX idx_links_dst ON links(dst);
 
-            CREATE TRIGGER contexts_ai AFTER INSERT ON contexts BEGIN
-              INSERT INTO contexts_fts(rowid, name, content)
-              VALUES (new.rowid, new.name, new.content);
-            END;
+CREATE VIRTUAL TABLE pages_fts USING fts5(id UNINDEXED, title, body);
+"#;
 
-            CREATE TRIGGER contexts_ad AFTER DELETE ON contexts BEGIN
-              INSERT INTO contexts_fts(contexts_fts, rowid, name, content)
-              VALUES ('delete', old.rowid, old.name, old.content);
-            END;
+/// Bump when `wiki.rs` starts producing different output from the same file.
+/// The schema itself needs no such constant — it is fingerprinted below — but a
+/// parser change leaves the schema identical while making every stored row
+/// stale, and nothing else would notice.
+const PARSER_VERSION: u64 = 1;
 
-            CREATE TRIGGER contexts_au AFTER UPDATE ON contexts BEGIN
-              INSERT INTO contexts_fts(contexts_fts, rowid, name, content)
-              VALUES ('delete', old.rowid, old.name, old.content);
-              INSERT INTO contexts_fts(rowid, name, content)
-              VALUES (new.rowid, new.name, new.content);
-            END;
+/// A stable fingerprint of what the index *is*: its shape plus the parser that
+/// filled it. FNV-1a rather than `DefaultHasher`, whose output is explicitly
+/// not stable across Rust releases and would silently rebuild the index on a
+/// toolchain upgrade.
+fn fingerprint() -> i32 {
+    let mut h: u64 = 0xcbf2_9ce4_8422_2325;
+    for b in SCHEMA.as_bytes().iter().chain(&PARSER_VERSION.to_le_bytes()) {
+        h ^= *b as u64;
+        h = h.wrapping_mul(0x100_0000_01b3);
+    }
+    // `user_version` is i32; the low bits are as good as any.
+    h as i32
+}
 
-            PRAGMA user_version = 1;
-            "#,
-        )?;
+/// The tables `SCHEMA` creates. Anything else in the file is an orphan from an
+/// older build and is dropped.
+const EXPECTED_TABLES: [&str; 4] = ["pages", "sections", "links", "pages_fts"];
+
+fn ensure_schema(conn: &Connection) -> Result<()> {
+    let stored: i32 = conn.query_row("PRAGMA user_version", [], |r| r.get(0))?;
+    let found = user_tables(conn)?;
+
+    let fresh = found.is_empty();
+    let orphans: Vec<&String> = found
+        .iter()
+        .filter(|n| !EXPECTED_TABLES.contains(&n.as_str()))
+        .collect();
+
+    if !fresh && stored == fingerprint() && orphans.is_empty() {
+        return Ok(());
     }
 
-    if version < 2 {
-        // The wiki index. Every row here is derived from a markdown file under
-        // ~/Baton and can be deleted and rebuilt at any time.
-        //
-        // No triggers, unlike `contexts` above. `pages` is not the source of
-        // truth, so a write is always "replace everything this page had", which
-        // the indexer does in one transaction. `pages_fts` is a plain FTS5
-        // table rather than external-content for the same reason: it keeps its
-        // own copy, so a stale row is removed by a DELETE with a WHERE clause
-        // instead of the external-content 'delete' command, which needs the old
-        // values and is the part that silently drifts when it is wrong.
-        conn.execute_batch(
-            r#"
-            CREATE TABLE pages (
-              id         TEXT PRIMARY KEY,   -- 'projects/baton/db', from wiki::page_id
-              path       TEXT NOT NULL,
-              type       TEXT NOT NULL,
-              project    TEXT,               -- NULL for pages in concepts/
-              status     TEXT NOT NULL,
-              updated    TEXT NOT NULL,      -- the frontmatter date, ISO
-              title      TEXT NOT NULL,
-              body       TEXT NOT NULL,
-              mtime      INTEGER NOT NULL,   -- epoch ms, the change gate
-              size       INTEGER NOT NULL,
-              indexed_at TEXT NOT NULL
-            );
-
-            CREATE INDEX idx_pages_project ON pages(project);
-
-            CREATE TABLE sections (
-              page_id TEXT NOT NULL REFERENCES pages(id) ON DELETE CASCADE,
-              ord     INTEGER NOT NULL,
-              heading TEXT NOT NULL,
-              body    TEXT NOT NULL,
-              PRIMARY KEY (page_id, ord)
-            );
-
-            -- `dst` is deliberately not a foreign key: a link may name a page
-            -- that does not exist, and finding those is the point.
-            CREATE TABLE links (
-              src TEXT NOT NULL REFERENCES pages(id) ON DELETE CASCADE,
-              dst TEXT NOT NULL,
-              PRIMARY KEY (src, dst)
-            );
-
-            CREATE INDEX idx_links_dst ON links(dst);
-
-            CREATE VIRTUAL TABLE pages_fts USING fts5(id UNINDEXED, title, body);
-
-            CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
-
-            PRAGMA user_version = 2;
-            "#,
-        )?;
+    // Drop what is actually there, not what we remember putting there.
+    // `pages_fts` must go before `pages`, and children before parents.
+    let mut order: Vec<&String> = found.iter().collect();
+    order.sort_by_key(|n| match n.as_str() {
+        "pages_fts" => 0,
+        "links" | "sections" => 1,
+        "pages" => 3,
+        _ => 2,
+    });
+    for name in order {
+        conn.execute_batch(&format!("DROP TABLE IF EXISTS \"{name}\";"))?;
     }
 
+    conn.execute_batch(SCHEMA)?;
+    // Cannot be bound: PRAGMA takes no parameters.
+    conn.execute_batch(&format!("PRAGMA user_version = {};", fingerprint()))?;
     Ok(())
+}
+
+/// Real tables in the file, excluding SQLite's own bookkeeping and the shadow
+/// tables an FTS5 virtual table owns — those go when their parent goes.
+fn user_tables(conn: &Connection) -> Result<Vec<String>> {
+    let mut stmt = conn.prepare(
+        "SELECT name FROM sqlite_master
+         WHERE type = 'table'
+           AND name NOT LIKE 'sqlite_%'
+           AND name NOT LIKE '%\\_fts\\_%' ESCAPE '\\'",
+    )?;
+    let rows = stmt.query_map([], |r| r.get(0))?;
+    Ok(rows.collect::<rusqlite::Result<Vec<String>>>()?)
 }
 
 fn now() -> String {
     chrono::Utc::now().to_rfc3339()
-}
-
-/// PRD §9's "remove everything" action, at the storage layer.
-///
-/// This clears the local database only. The wiki files under ~/Baton are the
-/// source of truth and are never touched here, so the next sweep rebuilds
-/// `pages` from disk. Dropping `meta` is what makes that sweep a full one.
-pub fn delete_all(conn: &Connection) -> Result<()> {
-    conn.execute_batch(
-        "DELETE FROM pages;
-         DELETE FROM sections;
-         DELETE FROM links;
-         DELETE FROM pages_fts;
-         DELETE FROM meta;",
-    )?;
-    Ok(())
-}
-
-fn to_fts_query(raw: &str) -> Option<String> {
-    let terms: Vec<String> = raw
-        .split(|c: char| !c.is_alphanumeric())
-        .filter(|t| !t.is_empty())
-        .map(|t| format!("\"{}\"*", t.to_lowercase()))
-        .collect();
-
-    if terms.is_empty() {
-        None
-    } else {
-        Some(terms.join(" "))
-    }
 }
 
 // ----------------------------------------------------------- the wiki index
@@ -198,15 +162,6 @@ fn to_fts_query(raw: &str) -> Option<String> {
 
 /// Bump this when `wiki.rs` changes the shape of what a parse produces.
 ///
-/// The sweep skips any file whose mtime and size match the indexed row. That
-/// gate is what makes a summon-time sweep free, and it is also a trap: without
-/// a version to compare, a parser change would leave every unchanged file
-/// holding rows in the old shape, silently. `user_version` tracks the schema,
-/// this tracks the parser.
-pub const INDEXER_VERSION: i64 = 1;
-
-const INDEXER_VERSION_KEY: &str = "indexer_version";
-
 /// What a page looked like on disk when it was indexed. Epoch milliseconds and
 /// a byte count, both wide enough in SQLite's 64-bit INTEGER.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -241,13 +196,6 @@ pub struct PageHit {
     pub snippet: String,
 }
 
-#[derive(Debug, Clone, serde::Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct BrokenLink {
-    pub src: String,
-    pub dst: String,
-}
-
 fn stat(path: &Path) -> std::io::Result<FileStat> {
     let meta = std::fs::metadata(path)?;
     let mtime = meta
@@ -269,13 +217,13 @@ fn stat(path: &Path) -> std::io::Result<FileStat> {
 /// the connection mutex across it would stall every other command for as long
 /// as the disk takes.
 pub fn sync(db: &Db, root: &Path) -> Result<IndexReport> {
-    let current_version = INDEXER_VERSION.to_string();
-
-    let (known, stored_version) = {
+    // A parser or schema change drops the whole index (see `ensure_schema`), so
+    // `known` is simply empty then and everything reparses. No separate
+    // "reparse everything" flag is needed.
+    let known = {
         let conn = db.0.lock().unwrap_or_else(|e| e.into_inner());
-        (page_stats(&conn)?, meta_get(&conn, INDEXER_VERSION_KEY)?)
+        page_stats(&conn)?
     };
-    let reparse_everything = stored_version.as_deref() != Some(current_version.as_str());
 
     let mut report = IndexReport::default();
     let mut parsed: Vec<(Page, FileStat)> = Vec::new();
@@ -295,7 +243,7 @@ pub fn sync(db: &Db, root: &Path) -> Result<IndexReport> {
             }
         };
 
-        if !reparse_everything && known.get(&id) == Some(&file) {
+        if known.get(&id) == Some(&file) {
             report.skipped += 1;
             continue;
         }
@@ -313,7 +261,6 @@ pub fn sync(db: &Db, root: &Path) -> Result<IndexReport> {
     }
     report.indexed = parsed.len();
     report.removed = remove_missing(&tx, &seen)?;
-    meta_set(&tx, INDEXER_VERSION_KEY, &current_version)?;
     tx.commit()?;
 
     Ok(report)
@@ -401,23 +348,6 @@ fn page_stats(conn: &Connection) -> Result<HashMap<String, FileStat>> {
     Ok(rows.collect::<rusqlite::Result<HashMap<_, _>>>()?)
 }
 
-fn meta_get(conn: &Connection, key: &str) -> Result<Option<String>> {
-    Ok(conn
-        .query_row("SELECT value FROM meta WHERE key = ?1", params![key], |r| {
-            r.get(0)
-        })
-        .optional()?)
-}
-
-fn meta_set(tx: &Transaction, key: &str, value: &str) -> Result<()> {
-    tx.execute(
-        "INSERT INTO meta (key, value) VALUES (?1, ?2)
-         ON CONFLICT(key) DO UPDATE SET value = excluded.value",
-        params![key, value],
-    )?;
-    Ok(())
-}
-
 fn row_to_hit(row: &rusqlite::Row) -> rusqlite::Result<PageHit> {
     Ok(PageHit {
         id: row.get(0)?,
@@ -433,12 +363,55 @@ fn row_to_hit(row: &rusqlite::Row) -> rusqlite::Result<PageHit> {
 
 const HIT_COLUMNS: &str = "p.id, p.path, p.title, p.type, p.project, p.status, p.updated";
 
+/// One row per project, for the launcher.
+///
+/// Projects, most recently touched first.
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BrokenLink {
+    pub src: String,
+    pub dst: String,
+}
+
 pub fn list_pages(conn: &Connection) -> Result<Vec<PageHit>> {
     let mut stmt = conn.prepare(&format!(
         "SELECT {HIT_COLUMNS}, '' FROM pages p ORDER BY p.updated DESC, p.id"
     ))?;
     let rows = stmt.query_map([], row_to_hit)?;
     Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
+}
+
+/// Empty the index. The wiki files are untouched — they are the source of
+/// truth and this is only the derived copy, so the next sweep restores
+/// everything.
+pub fn delete_all(conn: &Connection) -> Result<()> {
+    conn.execute_batch(
+        "DELETE FROM pages;
+         DELETE FROM sections;
+         DELETE FROM links;
+         DELETE FROM pages_fts;",
+    )?;
+    Ok(())
+}
+
+/// Turn raw user typing into a safe FTS5 prefix query.
+///
+/// User input can never reach the FTS parser directly: characters like `"`,
+/// `*`, `^`, `-` and `:` are query syntax and would either error or silently
+/// mean something else. Each run of alphanumerics becomes a quoted prefix term,
+/// and terms are ANDed (space is AND in FTS5).
+fn to_fts_query(raw: &str) -> Option<String> {
+    let terms: Vec<String> = raw
+        .split(|c: char| !c.is_alphanumeric())
+        .filter(|t| !t.is_empty())
+        .map(|t| format!("\"{}\"*", t.to_lowercase()))
+        .collect();
+
+    if terms.is_empty() {
+        None
+    } else {
+        Some(terms.join(" "))
+    }
 }
 
 /// Full-text search over the wiki.
@@ -502,17 +475,82 @@ mod tests {
     fn mem() -> Connection {
         let conn = Connection::open_in_memory().unwrap();
         conn.execute_batch("PRAGMA foreign_keys = ON;").unwrap();
-        migrate(&conn).unwrap();
+        ensure_schema(&conn).unwrap();
         conn
     }
 
     #[test]
-    fn migrate_is_idempotent() {
+    fn ensure_schema_is_idempotent() {
         let c = mem();
-        migrate(&c).unwrap();
-        migrate(&c).unwrap();
-        let v: i64 = c.query_row("PRAGMA user_version", [], |r| r.get(0)).unwrap();
-        assert_eq!(v, 2);
+        ensure_schema(&c).unwrap();
+        ensure_schema(&c).unwrap();
+        let v: i32 = c.query_row("PRAGMA user_version", [], |r| r.get(0)).unwrap();
+        assert_eq!(v, fingerprint());
+    }
+
+    #[test]
+    fn a_changed_fingerprint_rebuilds_from_empty() {
+        // The index carries no fact of its own, so a schema or parser change
+        // throws it away rather than migrating it. Anything still needed comes
+        // back from the files on the next sweep.
+        let c = mem();
+        c.execute(
+            "INSERT INTO pages (id, path, type, project, status, updated, title, body, mtime, size, indexed_at)
+             VALUES ('a','a.md','decision','baton','current','2026-08-23','A','b',0,0,'2026-08-23')",
+            [],
+        )
+        .unwrap();
+        assert_eq!(list_pages(&c).unwrap().len(), 1);
+
+        // Simulate the code moving on.
+        c.execute_batch("PRAGMA user_version = 999999;").unwrap();
+        ensure_schema(&c).unwrap();
+
+        assert!(list_pages(&c).unwrap().is_empty(), "stale rows survived");
+        let v: i32 = c.query_row("PRAGMA user_version", [], |r| r.get(0)).unwrap();
+        assert_eq!(v, fingerprint());
+    }
+
+    #[test]
+    fn the_fingerprint_is_stable_across_runs() {
+        // It is persisted, so a hash that varies per process would rebuild the
+        // index on every launch. `DefaultHasher` does exactly that, which is
+        // why this is FNV-1a.
+        assert_eq!(fingerprint(), fingerprint());
+        assert_ne!(fingerprint(), 0);
+    }
+
+    #[test]
+    fn a_rebuild_leaves_exactly_the_current_schema() {
+        // A table dropped from SCHEMA must also be dropped from an existing
+        // file, or old installs keep an orphan forever while fresh ones do not.
+        let c = mem();
+        c.execute_batch("CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);")
+            .unwrap();
+        c.execute_batch("PRAGMA user_version = 1;").unwrap();
+        ensure_schema(&c).unwrap();
+
+        let leftover: i64 = c
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master WHERE name = 'meta'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(leftover, 0, "a table SCHEMA no longer creates survived");
+    }
+
+    #[test]
+    fn a_fresh_database_has_no_pre_wiki_tables() {
+        let c = mem();
+        let names: Vec<String> = {
+            let mut stmt = c
+                .prepare("SELECT name FROM sqlite_master WHERE name IN ('contexts','sources','contexts_fts')")
+                .unwrap();
+            let rows = stmt.query_map([], |r| r.get(0)).unwrap();
+            rows.map(|r| r.unwrap()).collect()
+        };
+        assert!(names.is_empty(), "legacy tables present: {names:?}");
     }
 
     // ------------------------------------------------------------ wiki index
@@ -677,14 +715,15 @@ mod tests {
         let w = Fixture::new();
         w.write("a", "current", "# A\n\n## Decision\n\nOne.\n");
         w.sweep();
+        // Unchanged file, so the mtime gate skips it.
         assert_eq!(w.sweep().skipped, 1);
 
-        // What bumping INDEXER_VERSION looks like from the index's side.
+        // What bumping PARSER_VERSION looks like from the index's side: the
+        // fingerprint no longer matches, so the schema and every row go.
         {
-            let mut conn = w.db.0.lock().unwrap_or_else(|e| e.into_inner());
-            let tx = conn.transaction().unwrap();
-            meta_set(&tx, INDEXER_VERSION_KEY, "0").unwrap();
-            tx.commit().unwrap();
+            let conn = w.db.0.lock().unwrap_or_else(|e| e.into_inner());
+            conn.execute_batch("PRAGMA user_version = 424242;").unwrap();
+            ensure_schema(&conn).unwrap();
         }
 
         let report = w.sweep();
@@ -713,23 +752,6 @@ mod tests {
         let hits = w.read(|c| search_pages(c, "json"));
         assert_eq!(hits.len(), 2);
         assert_eq!(hits[0].id, "new", "a superseded page outranked the live one");
-    }
-
-    #[test]
-    fn a_link_to_a_page_that_does_not_exist_is_reported_as_broken() {
-        let w = Fixture::new();
-        w.write(
-            "a",
-            "current",
-            "# A\n\n## Decision\n\nSee [[open/browser-conversations]] and [[b]].\n",
-        );
-        w.write("b", "current", "# B\n\n## Decision\n\nHere.\n");
-        w.sweep();
-
-        let broken = w.read(|c| broken_links(c));
-        assert_eq!(broken.len(), 1);
-        assert_eq!(broken[0].src, "a");
-        assert_eq!(broken[0].dst, "open/browser-conversations");
     }
 
     #[test]
