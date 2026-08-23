@@ -52,6 +52,6 @@ Two things to know:
 
 ## Docs
 
-- **[PRD.md](PRD.md)** — product spec, architecture decisions, milestone plan
+- **[docs/PLAN.md](docs/PLAN.md)** — the plan of record: phases, decisions, what is next
 - **[CLAUDE.md](CLAUDE.md)** — architecture rules and gotchas for AI coding sessions
 - **[docs/PLAN.md](docs/PLAN.md)** — the live phase plan and decision log

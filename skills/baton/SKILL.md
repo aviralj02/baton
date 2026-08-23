@@ -12,6 +12,10 @@ Everything you need is already in this conversation. Do not re-read the transcri
 search the codebase, or gather more context. The point of running at the end of a
 session is that you already know what happened.
 
+This is a tax on finishing, so keep it cheap or the habit dies — and the habit is the
+whole design. Read the pages you need in one batch, not one at a time. No preamble, no
+progress narration, no plan. Read, propose, write.
+
 ## Steps
 
 **1. Read the contract.** Read `~/Baton/AGENTS.md` in full. It defines the page types,
@@ -57,10 +61,19 @@ Order the list `update`, `create`, `supersede`, `conflict`. Keep each line short
 
 After writing:
 
-- Regenerate `~/Baton/index.md` from the tree on disk.
 - Append one line to `~/Baton/log.md`:
   `## <ISO date> ingest | <slug> | N edits | session <short id>`
-- Report what was written, in one line per file.
+- Do **not** touch `~/Baton/index.md`. Baton regenerates it from the tree after every
+  change. Editing it by hand only creates a diff that the next reindex discards.
+
+Then say **one sentence and stop**:
+
+> Saved to Baton — 3 pages filed.
+
+That is the whole report. Do not summarise the session, do not restate what the pages
+say, do not list them again, do not explain what you did. The user was there, and the
+pages are the record. If something genuinely needs their attention — a page you could
+not write, a contradiction you left unresolved — add one more line. Otherwise stop.
 
 ## Rules that matter most
 

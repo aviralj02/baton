@@ -1,172 +1,117 @@
 # Baton — notes for AI coding sessions
 
-**Read `docs/PLAN.md` first.** It is the only design document: the vision, the
-phase plan, the decision log, and what is next. **Then read `PRD.md`** for the
-original product spec, noting that the wiki direction agreed on 2026-08-22
-supersedes parts of it until Phase 4 reconciles the two. This file only covers
-how to work in the repo.
+**Read `docs/PLAN.md` first** for what this is, where it stands and what is next.
+This file is only how to work in the repo.
 
-## Docs layout
+## What it is, in one paragraph
 
-| File | Holds |
-|---|---|
-| `docs/PLAN.md` | The vision, the worked example, phases, task checkboxes, decision log, open questions. **Update in place as work lands.** Never start a parallel status doc. |
-| `PRD.md` | The original product spec and milestone history. Partly superseded, see above. |
-| `CLAUDE.md` | This file. Working rules, architecture constraints, gotchas. |
-| `~/Baton/` | The wiki itself, outside the repo. `AGENTS.md` is its schema, `index.md` lists every page, `log.md` records every ingest. |
+A launcher over a markdown wiki at `~/Baton/`. An agent files what a session learned
+via the `/baton` skill; Baton indexes those files and one hotkey puts a whole
+project's context on the clipboard. **Baton makes no model calls** — no API key, no
+network code. The files are the source of truth; SQLite is a rebuildable index.
 
-`docs/` holds long-lived planning and design documents only. It is not for
-generated output, notes for a single session, or anything a reader would not
-expect to still be true next month.
-
-## What this is
-
-**Baton** is a local-first, cross-platform (macOS + Windows) Raycast-style
-launcher that stores durable *context* documents about what a developer is
-working on, and copies them to the clipboard so they can be pasted into any AI
-tool. Tauri v2 + React frontend + Rust core.
-
-Note the vocabulary split: **Baton** is the product; a **context** is the thing
-it stores (`Context` struct, `contexts` table, `list_contexts` command). Keep
-them distinct in code and copy.
+Tauri v2 + React frontend + Rust core.
 
 ## Commands
 
 ```bash
-source "$HOME/.cargo/env"   # only if cargo is not on PATH; rustup normally adds it
 pnpm install
-pnpm tauri dev              # run the app
-pnpm build                  # frontend typecheck + build
-cd src-tauri && cargo build  # Rust only
+pnpm tauri dev               # run the app
+pnpm build                   # frontend typecheck + build
+cd src-tauri && cargo test   # 80 tests
 ```
 
-The window starts **hidden**. Summon with `⌘⇧Space` (macOS) / `Ctrl⇧Space`
-(Windows), or the tray icon.
+The window starts **hidden**. Summon with `⌘⇧Space` / `Ctrl⇧Space`, or the tray icon.
+If `cargo` is missing, `source "$HOME/.cargo/env"`.
 
-## Architecture rules — do not violate these
+## Vocabulary
 
-1. **Rust owns everything sensitive.** The API key, the SQLite connection, and
-   all Anthropic HTTP calls live in `src-tauri/`. The webview must never
-   receive an API key or hold a raw conversation longer than the `invoke` that
-   submits it. This is a privacy requirement, not a style preference —
-   see PRD §9.
+The UI and the code must agree on this.
 
-2. **`contexts.content` stores JSON, not markdown.** The `Context` struct is
-   the source of truth; markdown is rendered on demand at the clipboard
-   boundary only. The original PRD contradicted itself here; PRD §6 has the
-   resolution.
+| On disk | In code | To the user |
+|---|---|---|
+| `concepts/` | `PageType::Gotcha` | **constraint** |
+| `projects/<slug>/` | `project` | **project** |
 
-3. **Never log raw conversations.** No `dbg!`, no `println!`, and no error
-   messages that embed request bodies.
+The launcher shows **projects only**. The per-type file split is how the wiki
+organises itself, not a choice to put in front of someone mid-paste.
+
+## Rules — do not violate these
+
+1. **Files are the source of truth.** The SQLite tables are derived and may be deleted
+   and rebuilt at any time. Never let a fact live only in the database.
+
+2. **Baton does not write pages.** The agent writes them through the skill. There is
+   deliberately no `write_page` command — a second write path is a second place for
+   the schema to be violated. Baton *does* own the derived files: `index.md` and the
+   index itself.
+
+3. **`AGENTS.md` and `lint.rs` are one contract in two languages.** Required sections,
+   allowed headings and status rules are hard-coded in `lint.rs`. Change one, change
+   the other — a false lint finding is worse than a missing check, because findings
+   are pasted into the primer and believed.
 
 4. **The launcher window is created once at startup, hidden, and only ever
-   shown/hidden.** Never create or destroy it per invocation — that is a
-   300–800ms webview boot and it is the single thing that would make this feel
-   like a web app instead of a launcher. See `src-tauri/src/launcher.rs`.
+   shown/hidden.** Creating it per invocation is a 300–800ms webview boot and the one
+   thing that would make this feel like a web app.
 
-5. **No provider abstraction.** One LLM provider (Anthropic) until a second is
-   genuinely needed.
+5. **`skills/` is the only home for the schema and the command.** `onboarding.rs`
+   embeds both with `include_str!`.
 
 6. **Never hardcode `⌘` in JSX.** Import from `src/lib/platform.ts`.
-
-## Anthropic API
-
-No official Rust SDK — raw `reqwest` in `src-tauri/src/ai.rs`.
-
-**The app has no API key.** It POSTs to a proxy we run (`proxy/worker.js`),
-which injects the key. Never embed a key in the binary: `strings` or a wire
-proxy recovers it instantly. `BATON_API_BASE` overrides the endpoint at build
-time.
-
-**The app is provider-agnostic and must stay that way.** Baton always speaks
-the Anthropic Messages format; the Worker translates to Gemini (the default) or
-Anthropic based on its `PROVIDER` var. Do not add provider branching to
-`ai.rs` — Baton is a desktop app, so a client-side switch means rebuilding and
-redistributing binaries, while a Worker switch is a deploy. Add new providers
-as adapters in `proxy/worker.js`, covered by `proxy/worker.test.mjs`.
-
-- Model: `claude-opus-5`
-- Headers: `x-api-key`, `anthropic-version: 2023-06-01`, `content-type: application/json`
-- Adaptive thinking is on by default. **Do not pass `budget_tokens`** — it is
-  removed on this model and returns a 400.
-- Tune with `output_config.effort` (`"low"` | `"medium"` | `"high"`), not token budgets.
-- Prefer **structured outputs** (`output_config.format` + JSON Schema matching
-  the `Context` struct) over parsing markdown out of prose.
-
-Full prompt text for create/update/handoff is in PRD §10.
 
 ## Layout
 
 ```
-src/                     React webview — pure UI, no secrets
-  App.tsx                routes on ?view=browser
-  Launcher.tsx           cmdk launcher panel
-  Browser.tsx            main browsing window (PRD §13)
+src/                     React webview
+  Launcher.tsx           projects only; ↵ copies a project's whole context
+  Browser.tsx            page browsing, grouped per project
   components/
-    ContextDetail.tsx    Flow D: view / edit / copy / delete
+    PageDetail.tsx       one page, with backlinks
+    Setup.tsx            first run: wiki path, install the skill
   lib/api.ts             every invoke() call lives here, nowhere else
-  lib/platform.ts        IS_MAC, MOD_LABEL, hasMod()
-  types.ts               Context interface, mirrors the Rust struct
 src-tauri/src/
-  lib.rs                 plugin registration, global shortcut, setup hook
   commands.rs            the whole IPC surface
-  db.rs                  SQLite: schema, migrations, FTS5, queries
-  context.rs             Context type + markdown rendering
+  wiki.rs                read/parse a page: frontmatter, sections, links
+  db.rs                  the index: schema, migrations, FTS5, queries
+  primer.rs              assemble one project's pages into a brief
+  lint.rs                structural checks, surfaced in the primer
+  index_md.rs            regenerate ~/Baton/index.md from the tree
+  watcher.rs             reindex on change, debounced
+  onboarding.rs          create the wiki, install the skill
   launcher.rs            show / hide / toggle, NSPanel, vibrancy
-  tray.rs                menu bar / system tray
+skills/                  the schema and the command: embedded and installable
 ```
 
-## Storage
+Storage: `~/Library/Application Support/com.aviralj02.baton/baton.sqlite3`. Four
+tables — `pages`, `sections`, `links`, `pages_fts` — all derived from the markdown.
+There are no migrations: edit the `SCHEMA` constant in `db.rs` and the next launch
+drops the index and rebuilds it from the files. `ensure_schema` also drops any table
+`SCHEMA` no longer creates, so there is no second list to keep in step.
 
-`~/Library/Application Support/com.aviralj02.baton/baton.sqlite3` on macOS
-(app-data dir keyed by bundle identifier). Schema version lives in
-`PRAGMA user_version`; add a numbered block in `db::migrate` to change it —
-never edit an existing block, it has already run on real data.
+## Gotchas
 
-`cargo test --lib` covers the storage layer (12 tests). The FTS index is
-*external-content*: it stores no copy of the rows and is kept in sync purely by
-the three triggers. If you touch the `contexts` schema, verify
-`fts_index_stays_in_sync_on_update_and_delete` still passes — a broken trigger
-makes search silently return stale results rather than fail.
-
-## Gotchas already hit
-
-- **pnpm 11** uses `allowBuilds:` in `pnpm-workspace.yaml` to approve build
-  scripts, not `onlyBuiltDependencies` and not the `pnpm` field in
-  `package.json`. `esbuild` is already approved there; if you add a dep with a
-  postinstall script you will need to add it too.
-- **`macOSPrivateApi: true`** in `tauri.conf.json` requires the
-  `macos-private-api` cargo feature on the `tauri` crate. They must be changed
-  together or the build script fails with an unhelpful allowlist error.
-- **reqwest 0.13** renamed the TLS feature; `rustls-tls` does not exist. rustls
-  is on by default — only `json` needs to be requested.
-- **keyring 4.x** enables macOS Keychain and Windows Credential Manager through
-  its default `v1` feature. Do not pass `apple-native` / `windows-native`.
-- **AppKit is main-thread-only.** The global-shortcut handler and the
-  single-instance callback run on tokio worker threads; touching NSWindow from
-  them crashes with EXC_BREAKPOINT (this happened). Tauri's own window methods
-  marshal internally; anything hand-rolled must go through
-  `run_on_main_thread`. The nspanel handle is not `Send` — fetch it *inside*
-  the main-thread closure via `get_webview_panel`, don't move it in.
-- **tauri-nspanel replaces tao's window delegate on macOS**, so
-  `WindowEvent::Focused` never fires there. Blur-dismissal lives in the panel
-  delegate (`launcher.rs`); the `on_window_event` handler in `lib.rs` is for
-  Windows. The crate is pinned by rev in Cargo.toml — bump deliberately.
-- **The structured-output JSON Schema must match `ContextBody`'s serde names
-  exactly** (`ai.rs`). A mismatch is not an error — the model returns valid
-  JSON, serde fills defaults, and the context saves silently empty. Pinned by
-  `schema_field_names_match_the_struct`.
-- **`stop_reason: "refusal"` arrives as HTTP 200.** Check it before reading
-  `content`, or a declined request looks like an empty response.
-- **Never hold the DB `Mutex` across an `.await`.** The AI commands take the
-  lock, drop it, make the request, then re-take it — holding it would block
-  every other command for the duration of the API call.
-- **Launcher dismissal needs a blur grace period** (400ms, `launcher.rs`):
-  a resign-key/blur arriving right after show() is part of the show
-  transition; hiding on it makes the launcher flash open and vanish.
-
-## Immediate next task
-
-Deploy the proxy (`proxy/README.md`) and set `BATON_API_BASE` — generation
-cannot work until then. After that: PRD §14b (raw conversation storage), the
-configurable shortcut, and a first Windows test pass.
+- **AppKit is main-thread-only.** The global-shortcut handler and the single-instance
+  callback run on tokio worker threads; touching NSWindow from them crashes with
+  `EXC_BREAKPOINT`. Tauri's own window methods marshal internally; anything
+  hand-rolled must go through `run_on_main_thread`. The nspanel handle is not `Send` —
+  fetch it *inside* the closure, don't move it in.
+- **tauri-nspanel replaces tao's window delegate on macOS**, so `WindowEvent::Focused`
+  never fires there. Blur-dismissal lives in the panel delegate; the `on_window_event`
+  handler is for Windows. The crate is pinned by rev — bump deliberately.
+- **Launcher dismissal needs a blur grace period** (400ms). A resign-key arriving
+  right after `show()` is part of the show transition; hiding on it makes the launcher
+  flash open and vanish.
+- **A derived file inside a watched folder loops.** `index.md`, `log.md` and
+  `AGENTS.md` are excluded from the watch filter, and `write_if_changed` skips an
+  identical write. Either guard alone leaves a reindex that never settles.
+- **`db::sync` is incremental** and never holds the whole tree, so `index_md` walks
+  the folder itself. Reusing the indexer's output lists only the changed pages.
+- **Code behind a false `#[cfg]` is not type-checked.** The fourteen Windows branches
+  have never been compiled. "It builds here" says nothing about them.
+- **`macOSPrivateApi: true`** in `tauri.conf.json` requires the `macos-private-api`
+  cargo feature. Change both together or the build fails with an unhelpful allowlist
+  error.
+- **pnpm 11** approves build scripts via `allowBuilds:` in `pnpm-workspace.yaml`, not
+  `onlyBuiltDependencies` and not the `pnpm` field in `package.json`.
+- **Never hold the DB `Mutex` across a file read.**

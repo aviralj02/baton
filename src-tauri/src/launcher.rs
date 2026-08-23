@@ -62,7 +62,7 @@ fn apply_background_effect(app: &AppHandle) {
     }
 
     // Acrylic tint: dark, mostly transparent. UNTESTED — needs a real Windows
-    // machine; see PRD §11 Milestone 1.
+    // machine; see the carried-over tasks in docs/PLAN.md.
     #[cfg(target_os = "windows")]
     if let Err(e) = window_vibrancy::apply_acrylic(&win, Some((24, 24, 24, 120))) {
         eprintln!("[baton] acrylic failed: {e}");
