@@ -1,0 +1,68 @@
+# The job that matters here is `rust (windows-latest)`.
+#
+# The non-macOS `#[cfg]` branches in this codebase have never been compiled, and
+# code behind a false cfg is not type-checked — so a green build on a Mac says
+# nothing at all about them. This is the cheap 80% of a Windows pass: it will
+# not tell us the launcher feels right, but it will stop us shipping a Windows
+# build that does not compile.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      # `pnpm build` is tsc + vite: this is the typecheck.
+      - run: pnpm build
+
+  rust:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      # tauri-build reads ../dist, and a missing frontend fails the build script
+      # before it ever reaches our code. A stub keeps this job independent of
+      # the frontend job while still exercising every Rust cfg branch.
+      - name: Stub the frontend bundle
+        shell: bash
+        run: mkdir -p dist && echo '<!doctype html><title>ci</title>' > dist/index.html
+
+      - name: Check
+        working-directory: src-tauri
+        run: cargo check --all-targets
+
+      - name: Test
+        working-directory: src-tauri
+        run: cargo test --lib
+
+      - name: Clippy
+        working-directory: src-tauri
+        run: cargo clippy --all-targets -- -D warnings

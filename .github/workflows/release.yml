@@ -1,0 +1,70 @@
+# Builds the downloads. Triggered by pushing a tag: `git tag v0.1.0 && git push --tags`.
+#
+# The artefacts are UNSIGNED until the two secrets blocks below are filled in.
+# An unsigned build is not merely "not notarised": macOS Gatekeeper refuses to
+# open it at all, and SmartScreen warns on Windows. Keep the release marked as a
+# prerelease, and keep the README honest, until signing is real.
+name: Release
+
+# Deliberately tag-only: no `workflow_dispatch`. Running this from the Actions
+# tab on a branch would name the release after the branch and cut a release
+# called "main". To rehearse it, push a throwaway tag and delete it after.
+on:
+  push:
+    tags: ["v*"]
+
+jobs:
+  build:
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # One universal binary rather than two downloads: it is a 4.7MB app,
+          # and asking a non-technical user which Mac they own is a step that
+          # loses people.
+          - os: macos-latest
+            target: universal-apple-darwin
+            args: "--target universal-apple-darwin"
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            args: ""
+
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.os == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || matrix.target }}
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # TODO when the Apple Developer account exists: add these four repo
+          # secrets and the build is notarised with no further changes here.
+          # APPLE_CERTIFICATE: base64 of the exported Developer ID .p12
+          # APPLE_CERTIFICATE_PASSWORD, APPLE_SIGNING_IDENTITY,
+          # APPLE_ID / APPLE_PASSWORD (app-specific) / APPLE_TEAM_ID
+          #
+          # TODO for Windows: WINDOWS_CERTIFICATE + WINDOWS_CERTIFICATE_PASSWORD.
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: "Baton ${{ github.ref_name }}"
+          releaseBody: "See CHANGELOG. These builds are not yet signed. On Windows, choose More info → Run anyway. On macOS, open the app once, then approve it in System Settings → Privacy & Security → Open Anyway (Control-click no longer works, and the button only appears for about an hour after the blocked launch)."
+          releaseDraft: true
+          prerelease: true
+          args: ${{ matrix.args }}
