@@ -2,6 +2,9 @@
   "name": "baton",
   "private": true,
   "version": "0.1.0",
+  "description": "Local-first context manager for AI-assisted development",
+  "license": "MIT",
+  "packageManager": "pnpm@11.6.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
