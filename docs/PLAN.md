@@ -42,9 +42,9 @@ exchanges. That is the bar for every phase.
 
 ### Verified state
 
-- `cargo test --lib`: 80 passing across `wiki`, `db`, `primer`, `lint`, `index_md`,
-  `watcher`, `onboarding`. `cargo build` has no dead-code warnings. `pnpm build` clean.
-- 15 commands, all project, page, primer or setup.
+- `cargo test --lib`: 90 passing across `wiki`, `db`, `primer`, `lint`, `index_md`,
+  `watcher`, `onboarding`, `remove`. `cargo build` has no dead-code warnings. `pnpm build` clean.
+- 18 commands, all project, page, primer, setup or delete.
 - Baton makes no model calls and contains no network code.
 - The launcher lists **projects**, one row each; `↵` copies that project's whole
   context, every page in full. Search matches project names and page titles, never
@@ -54,6 +54,8 @@ exchanges. That is the bar for every phase.
   on every reindex. Deleting `~/Baton/` recreates it and empties the index, whether the
   app is running or not.
 - First run creates `~/Baton/` and offers to install `/baton`.
+- A page, a whole project, or everything can be deleted from the browser. All three
+  go to the OS trash, so a mis-click is recoverable from the Finder or Recycle Bin.
 
 ---
 
@@ -64,11 +66,14 @@ exchanges. That is the bar for every phase.
 - [ ] Phase 0 acceptance test in a genuinely cold session.
 - [ ] User-configurable global shortcut, persisted.
 - [ ] Measure and defend launcher show latency. Hold well under 100ms.
-- [ ] First real Windows pass. Fourteen `#[cfg]` branches have never been compiled;
-      code behind a false `cfg` is not type-checked, so "it builds here" says nothing.
-      A `windows-latest` CI job running `cargo check` is the cheap 80%.
+- [ ] First real Windows pass, on a real machine. `.github/workflows/ci.yml` now
+      compiles the non-macOS `#[cfg]` branches on `windows-latest`, which is the cheap
+      80% — but a green `cargo check` says nothing about whether the launcher
+      shows, the acrylic tint lands, or the tray behaves.
 - [ ] Code signing: an Apple Developer account for notarisation, and a Windows
-      certificate. Blocks distribution, not development.
+      certificate. **This is the one thing between here and a usable download** —
+      an unsigned build is refused by Gatekeeper, not merely warned about. The
+      release workflow is written and takes the secrets without further edits.
 
 **Smaller, not blocking**
 

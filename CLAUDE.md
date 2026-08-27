@@ -18,7 +18,7 @@ Tauri v2 + React frontend + Rust core.
 pnpm install
 pnpm tauri dev               # run the app
 pnpm build                   # frontend typecheck + build
-cd src-tauri && cargo test   # 80 tests
+cd src-tauri && cargo test   # 90 tests
 ```
 
 The window starts **hidden**. Summon with `⌘⇧Space` / `Ctrl⇧Space`, or the tray icon.
@@ -44,7 +44,9 @@ organises itself, not a choice to put in front of someone mid-paste.
 2. **Baton does not write pages.** The agent writes them through the skill. There is
    deliberately no `write_page` command — a second write path is a second place for
    the schema to be violated. Baton *does* own the derived files: `index.md` and the
-   index itself.
+   index itself, and it may **delete** pages: removal cannot violate a schema, and a
+   wiki you can only add to is a hoard. Deletion goes to the OS trash, never
+   `remove_file` — see `remove.rs`.
 
 3. **`AGENTS.md` and `lint.rs` are one contract in two languages.** Required sections,
    allowed headings and status rules are hard-coded in `lint.rs`. Change one, change
@@ -77,6 +79,7 @@ src-tauri/src/
   primer.rs              assemble one project's pages into a brief
   lint.rs                structural checks, surfaced in the primer
   index_md.rs            regenerate ~/Baton/index.md from the tree
+  remove.rs              delete a page, a project or the lot — to the trash
   watcher.rs             reindex on change, debounced
   onboarding.rs          create the wiki, install the skill
   launcher.rs            show / hide / toggle, NSPanel, vibrancy
@@ -107,8 +110,9 @@ drops the index and rebuilds it from the files. `ensure_schema` also drops any t
   identical write. Either guard alone leaves a reindex that never settles.
 - **`db::sync` is incremental** and never holds the whole tree, so `index_md` walks
   the folder itself. Reusing the indexer's output lists only the changed pages.
-- **Code behind a false `#[cfg]` is not type-checked.** The fourteen Windows branches
-  have never been compiled. "It builds here" says nothing about them.
+- **Code behind a false `#[cfg]` is not type-checked.** CI compiles the non-macOS
+  branches on `windows-latest`, so they are at least type-checked now. Nobody has
+  ever *run* them: "it builds there" is not "it works there".
 - **`macOSPrivateApi: true`** in `tauri.conf.json` requires the `macos-private-api`
   cargo feature. Change both together or the build fails with an unhelpful allowlist
   error.

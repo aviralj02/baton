@@ -18,7 +18,11 @@ pnpm install-baton           # install /baton, create ~/Baton
 pnpm tauri dev               # run the app
 pnpm build                   # frontend typecheck + build
 cd src-tauri && cargo test   # 84 tests
+cd src-tauri && cargo clippy --all-targets -- -D warnings
 ```
+
+The clippy line is the same gate CI runs, so run it before pushing or the build
+goes red on style.
 
 If `cargo` is not found, run `source "$HOME/.cargo/env"` or add it to your shell
 profile.
@@ -89,9 +93,20 @@ cd /tmp/verify && cargo test
 Testing in place proves nothing about what was staged. Two commits in one
 session were broken this way and neither was caught until the method changed.
 
+### CI
+
+`.github/workflows/ci.yml` runs the frontend typecheck on Linux, and
+`cargo check --all-targets`, `cargo test --lib` and clippy on **macOS and
+Windows**. The Windows job is the point: it is the only thing that type-checks
+the non-macOS `#[cfg]` branches, which nobody has ever compiled otherwise. It
+stubs `dist/index.html` so it does not depend on the frontend job.
+
+### Releasing
+
+Bump the version, push a `v*` tag, publish the draft that appears. The steps are
+in **[RELEASE.md](RELEASE.md)**.
+
 ## Not yet done
 
-- [ ] No code signing, so a built app triggers Gatekeeper and SmartScreen warnings.
-- [ ] Windows has never had a real test pass — the platform branches are behind `#[cfg]`, and code behind a false `cfg` is not type-checked, so "it builds on macOS" says nothing about them. See [PLAN.md](PLAN.md).
-- [ ] Delete all data button in Browser like Rebuild Index one.
-- [ ] Delete a page or whole context button also
+- [ ] No code signing. This is stronger than a warning on macOS: Gatekeeper refuses to open an unsigned download at all. Needs an Apple Developer account; the release workflow is already wired for the secrets.
+- [ ] Windows has never had a real hands-on pass. CI now type-checks the platform branches, but nobody has watched the launcher show, the acrylic tint land, or the tray open on Windows. See [PLAN.md](PLAN.md).
