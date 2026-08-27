@@ -145,10 +145,8 @@ mod macos {
         });
         let handle = app.clone();
         delegate.set_listener(Box::new(move |event: String| {
-            if event.as_str() == "window_did_resign_key" {
-                if !super::in_blur_grace() {
-                    super::hide(&handle);
-                }
+            if event.as_str() == "window_did_resign_key" && !super::in_blur_grace() {
+                super::hide(&handle);
             }
         }));
         panel.set_delegate(delegate);

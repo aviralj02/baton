@@ -690,7 +690,7 @@ mod tests {
         let report = w.sweep();
         assert_eq!((report.indexed, report.skipped, report.removed), (2, 0, 0));
         assert!(report.errors.is_empty());
-        assert_eq!(w.read(|c| list_pages(c)).len(), 2);
+        assert_eq!(w.read(list_pages).len(), 2);
 
         let hits = w.read(|c| search_pages(c, "git"));
         assert_eq!(hits.len(), 1);
@@ -712,7 +712,7 @@ mod tests {
 
         let again = w.sweep();
         assert_eq!((again.indexed, again.skipped), (0, 1));
-        assert_eq!(w.read(|c| list_pages(c)).len(), 1, "a skip must not drop the row");
+        assert_eq!(w.read(list_pages).len(), 1, "a skip must not drop the row");
     }
 
     #[test]
@@ -753,7 +753,7 @@ mod tests {
 
         assert_eq!((report.indexed, report.skipped, report.removed), (0, 1, 1));
         assert!(w.read(|c| search_pages(c, "stripe")).is_empty());
-        assert_eq!(w.read(|c| list_pages(c)).len(), 1);
+        assert_eq!(w.read(list_pages).len(), 1);
 
         let sections: i64 =
             w.read(|c| Ok(c.query_row("SELECT COUNT(*) FROM sections", [], |r| r.get(0))?));
@@ -784,14 +784,14 @@ mod tests {
         let w = Fixture::new();
         w.write("a", "current", "# A\n\n## Decision\n\nOne.\n");
         w.sweep();
-        assert_eq!(w.read(|c| list_pages(c)).len(), 1);
+        assert_eq!(w.read(list_pages).len(), 1);
 
         std::fs::remove_dir_all(&w.root).unwrap();
         let report = w.sweep();
 
         assert_eq!(report.removed, 1, "the vanished page was not removed");
-        assert!(w.read(|c| list_pages(c)).is_empty());
-        assert!(w.read(|c| list_projects(c)).is_empty());
+        assert!(w.read(list_pages).is_empty());
+        assert!(w.read(list_projects).is_empty());
     }
 
     #[test]
@@ -847,7 +847,7 @@ mod tests {
             "# A decision\n\n## Decision\n\nx\n\n## Why\n\ny\n\n## Rejected\n\nz\n");
         w.sweep();
 
-        let rows = w.read(|c| list_projects(c));
+        let rows = w.read(list_projects);
         assert_eq!(rows.len(), 1, "two pages of one project must be one row");
         assert_eq!(rows[0].slug, "baton");
         assert_eq!(rows[0].page_count, 2);
@@ -861,7 +861,7 @@ mod tests {
         w.write_as("projects/orphaned/decisions/d", "decision", "orphaned",
             "# A decision\n\n## Decision\n\nx\n\n## Why\n\ny\n\n## Rejected\n\nz\n");
         w.sweep();
-        let rows = w.read(|c| list_projects(c));
+        let rows = w.read(list_projects);
         assert_eq!(rows[0].title, "orphaned");
     }
 
@@ -910,7 +910,7 @@ mod tests {
         w.write_as("concepts/g", "gotcha", "null",
             "# G\n\n## The constraint\n\na\n\n## The symptom\n\nb\n\n## The fix\n\nc\n");
         w.sweep();
-        assert!(w.read(|c| list_projects(c)).is_empty());
+        assert!(w.read(list_projects).is_empty());
     }
 
     #[test]
@@ -919,8 +919,8 @@ mod tests {
         w.write("a", "current", "# A\n\n## Decision\n\nStripe billing.\n");
         w.sweep();
 
-        w.read(|c| delete_all(c));
-        assert!(w.read(|c| list_pages(c)).is_empty());
+        w.read(delete_all);
+        assert!(w.read(list_pages).is_empty());
         assert!(w.read(|c| search_pages(c, "stripe")).is_empty());
         assert!(
             w.root.join("a.md").exists(),
