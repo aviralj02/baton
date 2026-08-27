@@ -45,12 +45,12 @@ export function Setup({
     <div className="flex h-full flex-col overflow-y-auto px-6 py-5">
       <div className="mb-4 flex items-center gap-2.5">
         <Logo size={20} />
-        <h1 className="text-[15px] font-medium dark:text-neutral-100">
+        <h1 className="text-[15px] font-medium dark:text-stone-100">
           Set up Baton
         </h1>
       </div>
 
-      <p className="mb-5 text-sm leading-relaxed text-neutral-600 dark:text-neutral-300">
+      <p className="mb-5 text-sm leading-relaxed text-stone-600 dark:text-stone-300">
         Baton reads a wiki that your coding agent writes. It never calls a model
         itself — so the agent needs a <code className="rounded bg-black/5 px-1 py-0.5 text-[12px] dark:bg-white/10">/baton</code>{" "}
         command to file what it learned.
@@ -59,7 +59,7 @@ export function Setup({
       <Step n={1} done title="Wiki folder created">
         <button
           onClick={() => void api.revealWiki()}
-          className="font-mono text-[12px] text-neutral-500 underline-offset-2 hover:underline dark:text-neutral-400"
+          className="font-mono text-[12px] text-stone-500 underline-offset-2 hover:underline dark:text-stone-400"
         >
           {status.root}
         </button>
@@ -71,7 +71,7 @@ export function Setup({
         title="Install the /baton command"
       >
         {detected.length === 0 ? (
-          <p className="text-[13px] text-neutral-500 dark:text-neutral-400">
+          <p className="text-[13px] text-stone-500 dark:text-stone-400">
             No agent tools found. Install Claude Code, Codex, or Cursor, then
             reopen this screen.
           </p>
@@ -81,22 +81,20 @@ export function Setup({
               {detected.map((s) => (
                 <li
                   key={s.name}
-                  className="flex items-center gap-2 text-[13px] text-neutral-600 dark:text-neutral-300"
+                  className="flex items-center gap-2 text-[13px] text-stone-600 dark:text-stone-300"
                 >
                   <span
                     className={
                       s.installed && !s.outdated
-                        ? "text-green-600 dark:text-green-400"
-                        : "text-neutral-300 dark:text-neutral-600"
+                        ? "text-brand"
+                        : "text-stone-300 dark:text-stone-600"
                     }
                   >
                     ●
                   </span>
                   {s.name}
                   {s.outdated && (
-                    <span className="text-[11px] text-amber-600 dark:text-amber-400">
-                      needs updating
-                    </span>
+                    <span className="text-[11px] text-stone-400 dark:text-stone-500">needs updating</span>
                   )}
                 </li>
               ))}
@@ -105,13 +103,13 @@ export function Setup({
               <button
                 onClick={() => void install()}
                 disabled={busy}
-                className="rounded-md bg-neutral-900 px-2.5 py-1 text-xs font-medium text-white hover:bg-neutral-700 disabled:opacity-50 dark:bg-white dark:text-neutral-900 dark:hover:bg-neutral-200"
+                className="cursor-pointer rounded-md bg-brand px-2.5 py-1 text-xs font-medium text-white transition-all duration-150 hover:bg-brand-strong active:scale-[0.98] disabled:opacity-50 dark:text-stone-900"
               >
                 {busy ? "Installing…" : `Install for ${missing.length} tool${missing.length > 1 ? "s" : ""}`}
               </button>
             )}
             {installed && (
-              <p className="mt-2 text-[12px] text-green-700 dark:text-green-400">
+              <p className="mt-2 text-[12px] text-brand">
                 Installed for {installed.join(", ")}.
               </p>
             )}
@@ -123,7 +121,7 @@ export function Setup({
       </Step>
 
       <Step n={3} done={status.pageCount > 0} title="File your first session">
-        <p className="text-[13px] leading-relaxed text-neutral-500 dark:text-neutral-400">
+        <p className="text-[13px] leading-relaxed text-stone-500 dark:text-stone-400">
           Finish a piece of work with your agent, then run{" "}
           <code className="rounded bg-black/5 px-1 py-0.5 text-[12px] dark:bg-white/10">
             /baton
@@ -136,7 +134,7 @@ export function Setup({
 
       <button
         onClick={onDone}
-        className="mt-5 self-start text-[13px] text-neutral-500 underline-offset-2 hover:underline dark:text-neutral-400"
+        className="mt-5 self-start text-[13px] text-stone-500 underline-offset-2 hover:underline dark:text-stone-400"
       >
         {status.pageCount > 0 ? "Done" : "Skip for now"}
       </button>
@@ -160,14 +158,14 @@ function Step({
       <span
         className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[11px] font-medium ${
           done
-            ? "bg-green-600 text-white dark:bg-green-500"
-            : "bg-black/10 text-neutral-500 dark:bg-white/15 dark:text-neutral-300"
+            ? "bg-brand text-white dark:text-stone-900"
+            : "bg-black/10 text-stone-500 dark:bg-white/15 dark:text-stone-300"
         }`}
       >
         {done ? "✓" : n}
       </span>
       <div className="min-w-0 flex-1">
-        <h2 className="mb-1 text-[13px] font-medium dark:text-neutral-100">{title}</h2>
+        <h2 className="mb-1 text-[13px] font-medium dark:text-stone-100">{title}</h2>
         {children}
       </div>
     </section>

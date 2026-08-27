@@ -68,7 +68,7 @@ Your agent does the writing; Baton does the remembering.
 <!-- TODO on first release: replace the line above with this.
 | macOS | Windows |
 |---|---|
-| [Apple silicon](TODO) · [Intel](TODO) | [Installer](TODO) |
+| [Download .dmg](TODO) — Intel and Apple silicon | [Download installer](TODO) |
 
 Then run `/baton` once in any project to finish setup.
 -->
@@ -112,12 +112,19 @@ machine — the wiki is a folder you can read, grep, and delete.
 |---|---|
 | [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) | Build it, hack on it, how the pieces fit |
 | [docs/PLAN.md](docs/PLAN.md) | Phases, decisions, what's next |
+| [docs/RELEASE.md](docs/RELEASE.md) | How a release is cut |
 | [CLAUDE.md](CLAUDE.md) | Rules and gotchas for AI coding sessions |
 
 ## 🛠️ Status
 
-Working and used daily, but pre-release: not code-signed, no installer, and
-Windows has not had a real test pass yet. Issues and PRs welcome.
+Working and used daily, but pre-release. The builds are not code-signed yet:
+Windows shows a SmartScreen warning you can click through, and macOS refuses the
+app until you approve it under System Settings → Privacy & Security. Windows
+compiles in CI but has not had a real hands-on pass. Issues and PRs welcome.
 
-<!-- TODO on first release: swap the paragraph above for a short one-liner, add
-     a LICENSE file and link it, and uncomment the badges at the top. -->
+<!-- TODO on first release: swap the paragraph above for a short one-liner and
+     uncomment the badges at the top. -->
+
+## 📄 License
+
+[MIT](LICENSE) © Aviral Jain

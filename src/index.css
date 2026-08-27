@@ -2,6 +2,22 @@
 
 @theme {
   --font-sans: ui-sans-serif, -apple-system, "Segoe UI", system-ui, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
+  --color-brand: var(--brand);
+  --color-brand-strong: var(--brand-strong);
+}
+
+/* One accent, three jobs: the mark, the selected row, the primary action. */
+:root {
+  --brand: #b8760c;
+  --brand-strong: #8f5a08;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --brand: #f2b33d;
+    --brand-strong: #ffc659;
+  }
 }
 
 html,
@@ -17,4 +33,27 @@ body,
 body {
   user-select: none;
   -webkit-user-select: none;
+}
+
+/* Data reads as data: counts and timestamps must not reflow as digits change. */
+.tnum {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Controls only: a text field shows focus with its caret and needs no ring. */
+button:focus-visible,
+a:focus-visible,
+[role="button"]:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 1px;
+  border-radius: 4px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
 }

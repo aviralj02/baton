@@ -1,11 +1,21 @@
 import { useCallback, useEffect, useState } from "react";
 import { openPath } from "@tauri-apps/plugin-opener";
 import * as api from "./lib/api";
-import { relativeTime } from "./Launcher";
+import { relativeTime } from "./lib/time";
 import { PageDetail } from "./components/PageDetail";
 import { Setup, useSetupGate } from "./components/Setup";
 import { Logo } from "./components/Logo";
-import { Dot } from "./components/Dot";
+import { Tooltip } from "./components/Tooltip";
+import { SUMMON_LABEL } from "./lib/platform";
+import {
+  ChevronIcon,
+  InstallIcon,
+  RefreshIcon,
+  SearchIcon,
+  TrashIcon,
+  TypeIcon,
+  TYPE_LABEL,
+} from "./components/Icon";
 import type { Page, PageHit } from "./types";
 
 /** Markdown files under ~/Baton are the only store; the index is derived. */
@@ -64,9 +74,24 @@ export default function Browser() {
 
   const selectedId = selected?.kind === "page" ? selected.page.id : null;
 
+  // Writes into every detected tool, overwriting whatever is there. No detection
+  // to go stale, and an overwrite cannot duplicate.
+  const installSkills = async () => {
+    try {
+      const installed = await api.installSkills();
+      setToast(
+        installed.length
+          ? `/baton installed for ${installed.join(", ")}`
+          : "No agent tools found to install into",
+      );
+    } catch (e) {
+      setToast(String(e));
+    }
+  };
+
   if ((setup.needed || showSetup) && setup.status) {
     return (
-      <div className="flex h-screen w-screen flex-col bg-white text-neutral-900 dark:bg-neutral-900 dark:text-neutral-100">
+      <div className="flex h-screen w-screen flex-col bg-white text-stone-900 dark:bg-stone-900 dark:text-stone-100">
         <header
           data-tauri-drag-region
           className="h-11 shrink-0 border-b border-black/10 dark:border-white/10"
@@ -85,37 +110,59 @@ export default function Browser() {
   }
 
   return (
-    <div className="flex h-screen w-screen flex-col bg-white text-neutral-900 dark:bg-neutral-900 dark:text-neutral-100">
+    <div className="flex h-screen w-screen flex-col bg-white text-stone-900 dark:bg-stone-900 dark:text-stone-100">
       <header
         data-tauri-drag-region
         className="flex items-center gap-3 border-b border-black/10 px-4 py-2.5 dark:border-white/10"
       >
-        {/* pl-16 clears the macOS traffic lights on a decorated window. */}
         <span className="flex items-center gap-2 text-sm font-medium">
-          <Logo size={17} />
+          <Logo size={16} className="text-brand" />
           Baton
         </span>
-        <input
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search…"
-          className="ml-4 w-64 rounded-md border border-black/10 bg-black/3 px-2.5 py-1 text-sm outline-none placeholder:text-sm transition-all duration-200 focus:border-black/25 dark:border-white/10 dark:bg-white/5"
-        />
-        <button
-          onClick={() => void api.syncWiki().then(() => reload(query))}
-          className="ml-auto cursor-pointer rounded-md px-2.5 py-1 text-xs transition-all duration-150 hover:bg-black/5 active:scale-[0.98] dark:text-neutral-300 dark:hover:bg-white/10"
-        >
-          Refresh
-        </button>
+
+        <div className="relative ml-4">
+          <SearchIcon
+            size={13}
+            className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-stone-400"
+          />
+          <input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search pages"
+            className="w-64 rounded-md border border-black/10 bg-black/3 py-1 pl-7 pr-2.5 text-sm outline-none transition-colors duration-150 placeholder:text-stone-400 focus:border-brand/40 focus:bg-transparent dark:border-white/10 dark:bg-white/5 dark:placeholder:text-stone-500"
+          />
+        </div>
+
+        <div className="ml-auto flex items-center gap-0.5">
+          {/* Setup only shows on an empty wiki, so this is the only way back once pages exist. */}
+          <IconButton
+            label="Install the /baton command into your agent tools"
+            onClick={() => void installSkills()}
+          >
+            <InstallIcon size={15} />
+          </IconButton>
+          <IconButton
+            label="Re-scan ~/Baton for new and edited pages"
+            onClick={() => void api.syncWiki().then(() => reload(query))}
+          >
+            <RefreshIcon size={15} />
+          </IconButton>
+        </div>
       </header>
 
       <div className="flex min-h-0 flex-1">
-        <aside className="w-60 shrink-0 overflow-y-auto border-r border-black/10 p-2 dark:border-white/10">
+        <aside className="flex w-60 shrink-0 flex-col overflow-y-auto border-r border-black/10 p-2 dark:border-white/10">
           {pages.length === 0 && (
-            <p className="px-2 py-4 text-xs text-neutral-400">
-              {query.trim()
-                ? "No matches."
-                : "No pages yet. Run /baton at the end of a session to write one."}
+            <p className="px-2 py-6 text-center text-xs leading-relaxed text-stone-400 dark:text-stone-500">
+              {query.trim() ? (
+                "No matches."
+              ) : (
+                <>
+                  Nothing filed yet. Run{" "}
+                  <code className="font-mono text-brand">/baton</code> at the end of a
+                  session.
+                </>
+              )}
             </p>
           )}
 
@@ -150,24 +197,16 @@ export default function Browser() {
                   key={hit.id}
                   active={selectedId === hit.id}
                   onClick={() => void openPage(hit.id)}
-                  title={hit.title || readableId(hit.id)}
-                  meta={
-                    <span className="flex items-center gap-1.5">
-                      {hit.type}
-                      <Dot />
-                      {relativeTime(hit.updated)}
-                    </span>
-                  }
-                  faded={hit.status !== "current"}
+                  hit={hit}
                 />
               ))}
             </ProjectGroup>
           ))}
 
-          <div className="mt-4 border-t border-black/10 pt-3 dark:border-white/10">
+          <div className="mt-auto border-t border-black/10 pt-3 dark:border-white/10">
             {pending === "rebuild" && (
               <div className="px-1">
-                <p className="text-[11px] leading-relaxed text-neutral-500 dark:text-neutral-400">
+                <p className="text-[11px] leading-relaxed text-stone-500 dark:text-stone-400">
                   Rebuild the search index from the files in ~/Baton? Nothing is
                   deleted — the markdown is the source of truth and the index is
                   derived from it.
@@ -189,13 +228,13 @@ export default function Browser() {
                         setToast(String(e));
                       }
                     }}
-                    className="cursor-pointer rounded bg-neutral-900 px-2 py-1 text-[11px] font-medium text-white transition-all duration-150 hover:bg-neutral-700 active:scale-[0.98] dark:bg-white dark:text-neutral-900 dark:hover:bg-neutral-200"
+                    className="cursor-pointer rounded bg-stone-900 px-2 py-1 text-[11px] font-medium text-white transition-all duration-150 hover:bg-stone-700 active:scale-[0.98] dark:bg-stone-100 dark:text-stone-900 dark:hover:bg-white"
                   >
                     Rebuild
                   </button>
                   <button
                     onClick={() => setPending(null)}
-                    className="cursor-pointer px-1 text-[11px] text-neutral-500 transition-all duration-150 hover:underline"
+                    className="cursor-pointer px-1 text-[11px] text-stone-500 transition-all duration-150 hover:underline"
                   >
                     Cancel
                   </button>
@@ -205,7 +244,7 @@ export default function Browser() {
 
             {pending === "wipe" && (
               <div className="px-1">
-                <p className="text-[11px] leading-relaxed text-neutral-500 dark:text-neutral-400">
+                <p className="text-[11px] leading-relaxed text-stone-500 dark:text-stone-400">
                   Move every project and constraint in ~/Baton to the Trash?
                   {pages.length > 0 && ` That is ${pages.length} page${pages.length === 1 ? "" : "s"}.`}{" "}
                   Your schema stays, and everything else can be put back from the
@@ -230,20 +269,16 @@ export default function Browser() {
             )}
 
             {pending === null && (
-              <div className="flex items-center gap-3 px-1.5">
-                <button
-                  onClick={() => setPending("rebuild")}
-                  className="cursor-pointer text-[11px] text-neutral-400 transition-all duration-150 hover:text-neutral-600 dark:hover:text-neutral-200"
-                >
-                  Rebuild index…
-                </button>
+              <div className="flex items-center gap-1 px-0.5">
+                <FooterAction onClick={() => setPending("rebuild")}>
+                  <RefreshIcon size={12} />
+                  Rebuild index
+                </FooterAction>
                 {pages.length > 0 && (
-                  <button
-                    onClick={() => setPending("wipe")}
-                    className="cursor-pointer text-[11px] text-neutral-400 transition-all duration-150 hover:text-red-600 dark:hover:text-red-400"
-                  >
-                    Delete all…
-                  </button>
+                  <FooterAction danger onClick={() => setPending("wipe")}>
+                    <TrashIcon size={12} />
+                    Delete all
+                  </FooterAction>
                 )}
               </div>
             )}
@@ -259,7 +294,7 @@ export default function Browser() {
               onCopy={async () => {
                 try {
                   await api.copyPage(selected.page.id);
-                  setToast("Copied to clipboard");
+                  setToast("Page copied");
                 } catch (e) {
                   setToast(String(e));
                 }
@@ -284,10 +319,14 @@ export default function Browser() {
               }}
             />
           ) : (
-            <div className="flex h-full flex-col items-center justify-center gap-3 text-neutral-400">
-              <Logo size={40} className="opacity-25" />
-              <p className="text-sm">
-                Select a page, or press ⌘⇧Space anywhere to summon the launcher.
+            <div className="flex h-full flex-col items-center justify-center gap-3 px-8 text-center">
+              <Logo size={34} className="text-stone-300 dark:text-stone-700" />
+              <p className="max-w-xs text-sm leading-relaxed text-stone-400 dark:text-stone-500">
+                Pick a page to read it, or press{" "}
+                <kbd className="rounded border border-black/10 bg-black/3 px-1 py-px font-mono text-[11px] dark:border-white/10 dark:bg-white/5">
+                  {SUMMON_LABEL}
+                </kbd>{" "}
+                anywhere to copy a whole project.
               </p>
             </div>
           )}
@@ -295,11 +334,57 @@ export default function Browser() {
       </div>
 
       {toast && (
-        <div className="pointer-events-none fixed bottom-6 left-1/2 -translate-x-1/2 rounded-md bg-neutral-900/90 px-3 py-1.5 text-xs text-white shadow-lg dark:bg-white/90 dark:text-neutral-900">
+        <div className="pointer-events-none fixed bottom-6 left-1/2 -translate-x-1/2 rounded-md bg-stone-900/90 px-3 py-1.5 text-xs text-white shadow-lg dark:bg-stone-100/95 dark:text-stone-900">
           {toast}
         </div>
       )}
     </div>
+  );
+}
+
+/** An icon-only control. The label is both the tooltip and the accessible name. */
+function IconButton({
+  label,
+  onClick,
+  children,
+}: {
+  label: string;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <Tooltip label={label}>
+      <button
+        onClick={onClick}
+        aria-label={label}
+        className="cursor-pointer rounded-md p-1.5 text-stone-500 transition-all duration-150 hover:bg-black/5 hover:text-stone-900 active:scale-95 dark:text-stone-400 dark:hover:bg-white/10 dark:hover:text-stone-100"
+      >
+        {children}
+      </button>
+    </Tooltip>
+  );
+}
+
+function FooterAction({
+  danger,
+  onClick,
+  children,
+}: {
+  danger?: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={`flex cursor-pointer items-center gap-1.5 rounded px-1.5 py-1 text-[11px] text-stone-400 transition-colors duration-150 dark:text-stone-500 ${
+        danger
+          ? "hover:bg-red-500/10 hover:text-red-600 dark:hover:text-red-400"
+          : "hover:bg-black/5 hover:text-stone-700 dark:hover:bg-white/10 dark:hover:text-stone-200"
+      }`}
+    >
+      {children}
+    </button>
   );
 }
 
@@ -314,11 +399,7 @@ function readableId(id: string): string {
   return words.charAt(0).toUpperCase() + words.slice(1);
 }
 
-/**
- * The slug is carried alongside the display name because deleting a project
- * needs the folder name, and "Constraints" is a heading rather than a folder —
- * a null slug is what marks a group that cannot be deleted as a unit.
- */
+/** A null slug marks a group that is a heading, not a folder, so cannot be deleted. */
 type Group = { slug: string | null; name: string; pages: PageHit[] };
 
 function groupByProject(pages: PageHit[]): Group[] {
@@ -364,7 +445,7 @@ function ProjectGroup({
   if (confirming) {
     return (
       <section className="mb-1 px-2 py-1">
-        <p className="text-[11px] leading-relaxed text-neutral-500 dark:text-neutral-400">
+        <p className="text-[11px] leading-relaxed text-stone-500 dark:text-stone-400">
           Move <span className="font-medium">{name}</span> and its {count}{" "}
           {count === 1 ? "page" : "pages"} to the Trash?
         </p>
@@ -382,30 +463,36 @@ function ProjectGroup({
 
   return (
     <section className="mb-1">
-      {/* A row, not a button, because the delete control lives inside it and a
-          button cannot nest inside a button. */}
-      <div className="group flex items-center rounded pr-1 transition-colors hover:bg-black/[0.04] dark:hover:bg-white/5">
+      {/* A row, not a button: a button cannot nest inside a button. */}
+      <div className="group flex items-center rounded pr-1 transition-colors duration-150 hover:bg-black/4 dark:hover:bg-white/5">
         <button
           onClick={() => setOpen((v) => !v)}
-          className="flex min-w-0 flex-1 cursor-pointer items-center gap-1.5 px-2 py-1 text-[11px] font-medium uppercase tracking-wide text-neutral-400"
+          className="flex min-w-0 flex-1 cursor-pointer items-center gap-1.5 px-2 py-1 text-left"
         >
-          <span className={`transition-transform ${open ? "rotate-90" : ""}`}>›</span>
-          <span className="truncate">{name}</span>
-          <span className="ml-auto font-normal normal-case">{count}</span>
+          <ChevronIcon
+            size={11}
+            className={`shrink-0 text-stone-400 transition-transform duration-150 ${open ? "rotate-90" : ""}`}
+          />
+          <span className="truncate font-mono text-[10px] uppercase tracking-widest text-stone-400 dark:text-stone-500">
+            {name}
+          </span>
+          <span className="tnum ml-auto font-mono text-[10px] text-stone-300 dark:text-stone-600">
+            {count}
+          </span>
         </button>
         {onDelete && (
-          // Hidden until hover: this sits next to a control used constantly,
-          // and a delete that is always visible eventually gets hit.
+          // Hidden until hover: a delete next to a constant control eventually gets hit.
           <button
             onClick={() => setConfirming(true)}
             title={`Delete ${name}`}
-            className="ml-1 cursor-pointer rounded px-1 text-[11px] text-neutral-300 opacity-0 transition-all duration-150 group-hover:opacity-100 hover:text-red-600 dark:text-neutral-600 dark:hover:text-red-400"
+            aria-label={`Delete ${name}`}
+            className="ml-1 cursor-pointer rounded p-0.5 text-stone-300 opacity-0 transition-all duration-150 hover:text-red-600 group-hover:opacity-100 dark:text-stone-600 dark:hover:text-red-400"
           >
-            ✕
+            <TrashIcon size={12} />
           </button>
         )}
       </div>
-      {open && <div className="ml-1.5 border-l border-black/5 pl-1.5 dark:border-white/5">{children}</div>}
+      {open && <div className="ml-2 border-l border-black/5 pl-1 dark:border-white/5">{children}</div>}
     </section>
   );
 }
@@ -430,7 +517,7 @@ function ConfirmRow({
       </button>
       <button
         onClick={onCancel}
-        className="cursor-pointer px-1 text-[11px] text-neutral-500 transition-all duration-150 hover:underline"
+        className="cursor-pointer px-1 text-[11px] text-stone-500 transition-all duration-150 hover:underline"
       >
         Cancel
       </button>
@@ -438,32 +525,40 @@ function ConfirmRow({
   );
 }
 
+/** One line per page: the type as a mark, the title, and how stale it is. */
 function SidebarRow({
   active,
   onClick,
-  title,
-  meta,
-  faded,
+  hit,
 }: {
   active: boolean;
   onClick: () => void;
-  title: string;
-  meta: React.ReactNode;
-  faded: boolean;
+  hit: PageHit;
 }) {
+  const faded = hit.status !== "current";
   return (
     <button
       onClick={onClick}
-      className={`mb-0.5 block w-full cursor-pointer rounded-md px-2.5 py-1.5 text-left transition-all duration-150 active:scale-[0.98] ${
+      title={`${TYPE_LABEL[hit.type]} · ${relativeTime(hit.updated)}`}
+      className={`group relative mb-px flex w-full cursor-pointer items-center gap-2 rounded-md py-1.5 pl-2.5 pr-2 text-left transition-colors duration-150 before:absolute before:left-0 before:top-1/2 before:h-3.5 before:w-0.5 before:-translate-y-1/2 before:scale-y-0 before:rounded-full before:bg-brand before:transition-transform before:duration-150 ${
         active
-          ? "bg-black/7 dark:bg-white/10"
+          ? "bg-black/6 before:scale-y-100 dark:bg-white/10"
           : "hover:bg-black/4 dark:hover:bg-white/5"
       }`}
     >
-      <span className={`block truncate text-sm ${faded ? "text-neutral-400" : ""}`}>
-        {title}
+      <TypeIcon
+        type={hit.type}
+        size={13}
+        className={`shrink-0 ${active ? "text-brand" : "text-stone-400 dark:text-stone-500"}`}
+      />
+      <span
+        className={`truncate text-[13px] ${faded ? "text-stone-400 dark:text-stone-500" : ""}`}
+      >
+        {hit.title || readableId(hit.id)}
       </span>
-      <span className="block truncate text-[11px] text-neutral-400">{meta}</span>
+      <span className="tnum ml-auto shrink-0 font-mono text-[10px] text-stone-300 opacity-0 transition-opacity duration-150 group-hover:opacity-100 dark:text-stone-600">
+        {relativeTime(hit.updated).replace(" ago", "")}
+      </span>
     </button>
   );
 }
