@@ -128,8 +128,9 @@ export function Setup({
           <code className="rounded bg-black/5 px-1 py-0.5 text-[12px] dark:bg-white/10">
             /baton
           </code>
-          . It proposes pages; you approve them. After that, press the hotkey
-          anywhere to copy a brief into a fresh session.
+          . It files what the session learned without asking. After that,
+          press the hotkey anywhere to copy a project's context into a fresh
+          session.
         </p>
       </Step>
 

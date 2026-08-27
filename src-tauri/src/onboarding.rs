@@ -27,7 +27,7 @@ const SKILL_MD: &str = include_str!("../../skills/baton/SKILL.md");
 
 /// Seeds for the two derived files. `index.md` is rewritten from the tree on
 /// the first sweep, so this is only what an empty wiki shows.
-const INDEX_MD: &str = "# Baton index\n\nEvery page, grouped by project and then by type. Derived from the tree — edit the tree, not this file.\n\n_No pages yet. Run `/baton` at the end of a working session and the agent will propose the first ones._\n";
+const INDEX_MD: &str = "# Baton index\n\nEvery page, grouped by project and then by type. Derived from the tree — edit the tree, not this file.\n\n_No pages yet. Run `/baton` at the end of a working session and the agent will file the first ones._\n";
 const LOG_MD: &str = "# Log\n\nAppend-only record of what changed and when. Newest last, one entry per filing session.\n";
 
 /// Agent tools that read a `skills/` directory. Only ones already present on
