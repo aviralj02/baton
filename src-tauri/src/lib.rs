@@ -37,6 +37,33 @@ fn default_shortcut() -> Shortcut {
     Shortcut::new(Some(mods), Code::Space)
 }
 
+/// True only where an installed app lives; `tauri build` also outputs under `target/`.
+fn is_installed() -> bool {
+    let Ok(exe) = std::env::current_exe() else {
+        return false;
+    };
+
+    #[cfg(target_os = "macos")]
+    {
+        let home = std::env::var("HOME").unwrap_or_default();
+        exe.starts_with("/Applications") || exe.starts_with(format!("{home}/Applications"))
+    }
+
+    // NSIS installs to Program Files; a per-user install lands in LocalAppData.
+    #[cfg(target_os = "windows")]
+    {
+        ["ProgramFiles", "ProgramFiles(x86)", "LOCALAPPDATA"]
+            .iter()
+            .filter_map(|k| std::env::var(k).ok())
+            .any(|dir| exe.starts_with(dir))
+    }
+
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+    {
+        false
+    }
+}
+
 /// Turn on the login item once, on the very first launch.
 ///
 /// Baton is summoned by a hotkey and has no dock icon, so an install that does
@@ -50,10 +77,8 @@ fn default_shortcut() -> Shortcut {
 fn default_to_launching_at_login(app: &tauri::AppHandle, data_dir: &std::path::Path) {
     use tauri_plugin_autostart::ManagerExt;
 
-    // A dev run shares the release build's data directory, so without this it
-    // would register a login item pointing at target/debug — one that survives
-    // `cargo clean` as a broken entry in System Settings.
-    if cfg!(debug_assertions) {
+    // A login item stores an absolute path; one into target/ breaks on the next clean.
+    if !is_installed() {
         return;
     }
 
