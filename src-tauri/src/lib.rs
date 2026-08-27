@@ -36,6 +36,39 @@ fn default_shortcut() -> Shortcut {
     Shortcut::new(Some(mods), Code::Space)
 }
 
+/// Turn on the login item once, on the very first launch.
+///
+/// Baton is summoned by a hotkey and has no dock icon, so an install that does
+/// not come back after a reboot is indistinguishable from one that is broken:
+/// the user presses the shortcut, nothing happens, and there is no window to
+/// go looking in.
+///
+/// The marker file is what makes this a *default* rather than a policy. Without
+/// it, every launch would re-enable the login item and silently overrule anyone
+/// who turned it off in the tray or in System Settings.
+fn default_to_launching_at_login(app: &tauri::AppHandle, data_dir: &std::path::Path) {
+    use tauri_plugin_autostart::ManagerExt;
+
+    // A dev run shares the release build's data directory, so without this it
+    // would register a login item pointing at target/debug — one that survives
+    // `cargo clean` as a broken entry in System Settings.
+    if cfg!(debug_assertions) {
+        return;
+    }
+
+    let marker = data_dir.join("login-item-set");
+    if marker.exists() {
+        return;
+    }
+    if let Err(e) = app.autolaunch().enable() {
+        // Not fatal, and not worth a dialog: the hotkey still works for this
+        // session. Leaving the marker unwritten means the next launch retries.
+        eprintln!("[baton] could not add the login item: {e}");
+        return;
+    }
+    let _ = std::fs::write(&marker, "");
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let summon = default_shortcut();
@@ -76,6 +109,14 @@ pub fn run() {
             #[cfg(target_os = "macos")]
             app.set_activation_policy(tauri::ActivationPolicy::Accessory);
 
+            let dir = app.path().app_data_dir().map_err(|e| {
+                format!("no app data dir: {e}")
+            })?;
+            std::fs::create_dir_all(&dir)?;
+
+            // Before the tray is built, so its tick matches what we just did.
+            default_to_launching_at_login(app.handle(), &dir);
+
             tray::build(app)?;
 
             use tauri_plugin_global_shortcut::GlobalShortcutExt;
@@ -85,12 +126,8 @@ pub fn run() {
                 eprintln!("[baton] could not register {summon:?}: {e}");
             }
 
-            launcher::configure(&app.handle());
+            launcher::configure(app.handle());
 
-            let dir = app.path().app_data_dir().map_err(|e| {
-                format!("no app data dir: {e}")
-            })?;
-            std::fs::create_dir_all(&dir)?;
             let conn = db::open(&dir.join("baton.sqlite3"))?;
             app.manage(db::Db(std::sync::Mutex::new(conn)));
 
@@ -143,10 +180,11 @@ pub fn run() {
             // window delegate, so Focused events never fire there; dismissal
             // is handled by the panel delegate in launcher::macos instead.
             if let tauri::WindowEvent::Focused(focused) = event {
-                if win.label() == launcher::MAIN_WINDOW {
-                    if !focused && !launcher::in_blur_grace() {
-                        let _ = win.hide();
-                    }
+                if win.label() == launcher::MAIN_WINDOW
+                    && !focused
+                    && !launcher::in_blur_grace()
+                {
+                    let _ = win.hide();
                 }
             }
         })
