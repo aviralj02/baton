@@ -16,7 +16,8 @@ export default function Browser() {
   const [selected, setSelected] = useState<Selection>(null);
   const [query, setQuery] = useState("");
   const [toast, setToast] = useState<string | null>(null);
-  const [confirmWipe, setConfirmWipe] = useState(false);
+
+  const [pending, setPending] = useState<"rebuild" | "wipe" | null>(null);
   // A fresh install has no pages and no way to write one; setup is the only
   // useful thing to show until the /baton command exists.
   const setup = useSetupGate();
@@ -121,13 +122,28 @@ export default function Browser() {
           {/* Grouped by project, not one flat list. A flat list of every page
               across every project reads as noise the moment there is more than
               one project, and hides the fact that a project is the unit. */}
-          {groupByProject(pages).map(([project, group]) => (
+          {groupByProject(pages).map(({ slug, name, pages: group }) => (
             <ProjectGroup
-              key={project}
-              name={project}
+              key={name}
+              name={name}
               count={group.length}
               // A search should not require reopening every folder to see hits.
               defaultOpen={Boolean(query.trim()) || group.some((h) => h.id === selectedId)}
+              onDelete={
+                slug
+                  ? async () => {
+                      try {
+                        // The open page may have been inside the project.
+                        if (group.some((h) => h.id === selectedId)) setSelected(null);
+                        await api.deleteProject(slug);
+                        await reload(query);
+                        setToast(`${name} moved to Trash`);
+                      } catch (e) {
+                        setToast(String(e));
+                      }
+                    }
+                  : undefined
+              }
             >
               {group.map((hit) => (
                 <SidebarRow
@@ -149,9 +165,9 @@ export default function Browser() {
           ))}
 
           <div className="mt-4 border-t border-black/10 pt-3 dark:border-white/10">
-            {confirmWipe ? (
+            {pending === "rebuild" && (
               <div className="px-1">
-                <p className="text-[11px] text-neutral-500 dark:text-neutral-400">
+                <p className="text-[11px] leading-relaxed text-neutral-500 dark:text-neutral-400">
                   Rebuild the search index from the files in ~/Baton? Nothing is
                   deleted — the markdown is the source of truth and the index is
                   derived from it.
@@ -161,7 +177,7 @@ export default function Browser() {
                     onClick={async () => {
                       try {
                         setSelected(null);
-                        setConfirmWipe(false);
+                        setPending(null);
                         // Actually drops the index and re-reads every file. The
                         // previous version only re-swept and still reported a
                         // deletion, which was a false claim about a privacy
@@ -178,22 +194,58 @@ export default function Browser() {
                     Rebuild
                   </button>
                   <button
-                    onClick={() => setConfirmWipe(false)}
+                    onClick={() => setPending(null)}
                     className="cursor-pointer px-1 text-[11px] text-neutral-500 transition-all duration-150 hover:underline"
                   >
                     Cancel
                   </button>
                 </div>
               </div>
-            ) : (
-              // Not a delete: there is no local data beyond the index, and the
-              // index is derived from files the app never writes.
-              <button
-                onClick={() => setConfirmWipe(true)}
-                className="cursor-pointer px-1.5 text-[11px] text-neutral-400 transition-all duration-150 hover:text-neutral-600 dark:hover:text-neutral-200"
-              >
-                Rebuild index…
-              </button>
+            )}
+
+            {pending === "wipe" && (
+              <div className="px-1">
+                <p className="text-[11px] leading-relaxed text-neutral-500 dark:text-neutral-400">
+                  Move every project and constraint in ~/Baton to the Trash?
+                  {pages.length > 0 && ` That is ${pages.length} page${pages.length === 1 ? "" : "s"}.`}{" "}
+                  Your schema stays, and everything else can be put back from the
+                  Trash.
+                </p>
+                <ConfirmRow
+                  label="Move all to Trash"
+                  onConfirm={async () => {
+                    try {
+                      setSelected(null);
+                      setPending(null);
+                      await api.deleteEverything();
+                      await reload(query);
+                      setToast("Everything moved to Trash");
+                    } catch (e) {
+                      setToast(String(e));
+                    }
+                  }}
+                  onCancel={() => setPending(null)}
+                />
+              </div>
+            )}
+
+            {pending === null && (
+              <div className="flex items-center gap-3 px-1.5">
+                <button
+                  onClick={() => setPending("rebuild")}
+                  className="cursor-pointer text-[11px] text-neutral-400 transition-all duration-150 hover:text-neutral-600 dark:hover:text-neutral-200"
+                >
+                  Rebuild index…
+                </button>
+                {pages.length > 0 && (
+                  <button
+                    onClick={() => setPending("wipe")}
+                    className="cursor-pointer text-[11px] text-neutral-400 transition-all duration-150 hover:text-red-600 dark:hover:text-red-400"
+                  >
+                    Delete all…
+                  </button>
+                )}
+              </div>
             )}
           </div>
         </aside>
@@ -215,6 +267,17 @@ export default function Browser() {
               onOpenFile={async () => {
                 try {
                   await openPath(selected.page.path);
+                } catch (e) {
+                  setToast(String(e));
+                }
+              }}
+              onDelete={async () => {
+                const title = selected.page.title || readableId(selected.page.id);
+                try {
+                  setSelected(null);
+                  await api.deletePage(selected.page.id);
+                  await reload(query);
+                  setToast(`${title} moved to Trash`);
                 } catch (e) {
                   setToast(String(e));
                 }
@@ -251,7 +314,14 @@ function readableId(id: string): string {
   return words.charAt(0).toUpperCase() + words.slice(1);
 }
 
-function groupByProject(pages: PageHit[]): [string, PageHit[]][] {
+/**
+ * The slug is carried alongside the display name because deleting a project
+ * needs the folder name, and "Constraints" is a heading rather than a folder —
+ * a null slug is what marks a group that cannot be deleted as a unit.
+ */
+type Group = { slug: string | null; name: string; pages: PageHit[] };
+
+function groupByProject(pages: PageHit[]): Group[] {
   const groups = new Map<string, PageHit[]>();
   for (const hit of pages) {
     // The tilde sorts them after every real project without a special case.
@@ -262,39 +332,109 @@ function groupByProject(pages: PageHit[]): [string, PageHit[]][] {
   }
   return [...groups.entries()]
     .sort(([a], [b]) => a.localeCompare(b))
-    .map(([k, v]) => [k === "~Constraints" ? "Constraints" : k, v] as [string, PageHit[]]);
+    .map(([key, pages]) =>
+      key === "~Constraints"
+        ? { slug: null, name: "Constraints", pages }
+        : { slug: key, name: key, pages },
+    );
 }
 
 function ProjectGroup({
   name,
   count,
   defaultOpen,
+  onDelete,
   children,
 }: {
   name: string;
   count: number;
   defaultOpen: boolean;
+  /** Absent for Constraints, which is a heading over concepts/ rather than a folder. */
+  onDelete?: () => Promise<void>;
   children: React.ReactNode;
 }) {
   const [open, setOpen] = useState(defaultOpen);
+  const [confirming, setConfirming] = useState(false);
 
   // A search result that lands in a closed group would be invisible.
   useEffect(() => {
     if (defaultOpen) setOpen(true);
   }, [defaultOpen]);
 
+  if (confirming) {
+    return (
+      <section className="mb-1 px-2 py-1">
+        <p className="text-[11px] leading-relaxed text-neutral-500 dark:text-neutral-400">
+          Move <span className="font-medium">{name}</span> and its {count}{" "}
+          {count === 1 ? "page" : "pages"} to the Trash?
+        </p>
+        <ConfirmRow
+          label="Move to Trash"
+          onConfirm={async () => {
+            setConfirming(false);
+            await onDelete?.();
+          }}
+          onCancel={() => setConfirming(false)}
+        />
+      </section>
+    );
+  }
+
   return (
     <section className="mb-1">
-      <button
-        onClick={() => setOpen((v) => !v)}
-        className="flex w-full cursor-pointer items-center gap-1.5 rounded px-2 py-1 text-[11px] font-medium uppercase tracking-wide text-neutral-400 transition-colors hover:bg-black/[0.04] dark:hover:bg-white/5"
-      >
-        <span className={`transition-transform ${open ? "rotate-90" : ""}`}>›</span>
-        <span className="truncate">{name}</span>
-        <span className="ml-auto font-normal normal-case">{count}</span>
-      </button>
+      {/* A row, not a button, because the delete control lives inside it and a
+          button cannot nest inside a button. */}
+      <div className="group flex items-center rounded pr-1 transition-colors hover:bg-black/[0.04] dark:hover:bg-white/5">
+        <button
+          onClick={() => setOpen((v) => !v)}
+          className="flex min-w-0 flex-1 cursor-pointer items-center gap-1.5 px-2 py-1 text-[11px] font-medium uppercase tracking-wide text-neutral-400"
+        >
+          <span className={`transition-transform ${open ? "rotate-90" : ""}`}>›</span>
+          <span className="truncate">{name}</span>
+          <span className="ml-auto font-normal normal-case">{count}</span>
+        </button>
+        {onDelete && (
+          // Hidden until hover: this sits next to a control used constantly,
+          // and a delete that is always visible eventually gets hit.
+          <button
+            onClick={() => setConfirming(true)}
+            title={`Delete ${name}`}
+            className="ml-1 cursor-pointer rounded px-1 text-[11px] text-neutral-300 opacity-0 transition-all duration-150 group-hover:opacity-100 hover:text-red-600 dark:text-neutral-600 dark:hover:text-red-400"
+          >
+            ✕
+          </button>
+        )}
+      </div>
       {open && <div className="ml-1.5 border-l border-black/5 pl-1.5 dark:border-white/5">{children}</div>}
     </section>
+  );
+}
+
+/** The confirm/cancel pair every destructive action in this window uses. */
+function ConfirmRow({
+  label,
+  onConfirm,
+  onCancel,
+}: {
+  label: string;
+  onConfirm: () => void;
+  onCancel: () => void;
+}) {
+  return (
+    <div className="mt-2 flex gap-2">
+      <button
+        onClick={onConfirm}
+        className="cursor-pointer rounded bg-red-600 px-2 py-1 text-[11px] font-medium text-white transition-all duration-150 hover:bg-red-700 active:scale-[0.98]"
+      >
+        {label}
+      </button>
+      <button
+        onClick={onCancel}
+        className="cursor-pointer px-1 text-[11px] text-neutral-500 transition-all duration-150 hover:underline"
+      >
+        Cancel
+      </button>
+    </div>
   );
 }
 

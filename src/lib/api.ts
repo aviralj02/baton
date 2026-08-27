@@ -22,14 +22,29 @@ export const openMainWindow = () => invoke<void>("open_main_window");
 
 // ----------------------------------------------------------------- the wiki
 
+/** Clears the index and rebuilds it from the files. Never touches the files. */
+export const rebuildIndex = () => invoke<IndexReport>("rebuild_index");
+
 /**
  * Bring the index in line with the files under ~/Baton. Cheap to call: the
  * sweep skips every file whose mtime and size match the indexed row.
  */
-/** Clears the index and rebuilds it from the files. Never touches the files. */
-export const rebuildIndex = () => invoke<IndexReport>("rebuild_index");
-
 export const syncWiki = () => invoke<IndexReport>("sync_wiki");
+
+// Deleting. These are the only calls that touch the markdown, and every one of
+// them moves files to the OS trash rather than unlinking them, so a mis-click
+// is recovered from the Finder or the Recycle Bin. Each returns the index as it
+// stands afterwards.
+
+/** Moves one page's file to the trash. */
+export const deletePage = (id: string) => invoke<IndexReport>("delete_page", { id });
+
+/** Moves a whole project — every page under it — to the trash. */
+export const deleteProject = (slug: string) =>
+  invoke<IndexReport>("delete_project", { slug });
+
+/** Moves every project and constraint to the trash. The schema survives. */
+export const deleteEverything = () => invoke<IndexReport>("delete_everything");
 
 /**
  * Projects for the launcher — one row per project, never per page. A project's

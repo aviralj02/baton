@@ -5,6 +5,7 @@ mod launcher;
 mod lint;
 mod onboarding;
 pub mod primer;
+mod remove;
 mod tray;
 mod watcher;
 /// Public so the reader half of the wiki can be exercised before any command
@@ -204,6 +205,9 @@ pub fn run() {
             commands::read_page,
             commands::copy_page,
             commands::copy_primer,
+            commands::delete_page,
+            commands::delete_project,
+            commands::delete_everything,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

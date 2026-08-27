@@ -82,6 +82,61 @@ pub fn rebuild_index(app: tauri::AppHandle, db: State<'_, Db>) -> Result<db::Ind
     Ok(report)
 }
 
+// ------------------------------------------------------------- deleting
+//
+// The one place Baton touches the user's markdown. Everything goes to the OS
+// trash; see `remove.rs` for why that is not merely politeness.
+
+/// Trash `paths`, then bring the index back in line with what is left.
+///
+/// The re-sync is what removes the rows, not a delete statement: `db::sync`
+/// drops every page whose file has gone, so a trash operation that only half
+/// succeeded leaves an index that still matches the tree.
+fn discard_and_resync(
+    app: &tauri::AppHandle,
+    db: &Db,
+    paths: Vec<std::path::PathBuf>,
+) -> Result<db::IndexReport> {
+    let root = crate::wiki_root(app).map_err(db::DbError::Path)?;
+    crate::remove::discard(&paths)?;
+    let report = db::sync(db, &root)?;
+    if let Err(e) = crate::index_md::regenerate(&root) {
+        eprintln!("[baton] could not rewrite index.md: {e}");
+    }
+    Ok(report)
+}
+
+/// Move one page to the trash.
+#[tauri::command]
+pub fn delete_page(app: tauri::AppHandle, db: State<'_, Db>, id: String) -> Result<db::IndexReport> {
+    let root = crate::wiki_root(&app).map_err(db::DbError::Path)?;
+    let path = crate::remove::page(&root, &id)?;
+    discard_and_resync(&app, &db, vec![path])
+}
+
+/// Move a whole project — every page under `projects/<slug>/` — to the trash.
+#[tauri::command]
+pub fn delete_project(
+    app: tauri::AppHandle,
+    db: State<'_, Db>,
+    slug: String,
+) -> Result<db::IndexReport> {
+    let root = crate::wiki_root(&app).map_err(db::DbError::Path)?;
+    let dir = crate::remove::project(&root, &slug)?;
+    discard_and_resync(&app, &db, vec![dir])
+}
+
+/// Move every project and constraint to the trash, leaving an empty wiki.
+///
+/// `AGENTS.md` stays: it is the schema, not a page, and it may carry the user's
+/// own edits. What is left is what a fresh install has.
+#[tauri::command]
+pub fn delete_everything(app: tauri::AppHandle, db: State<'_, Db>) -> Result<db::IndexReport> {
+    let root = crate::wiki_root(&app).map_err(db::DbError::Path)?;
+    let targets = crate::remove::everything(&root)?;
+    discard_and_resync(&app, &db, targets)
+}
+
 /// Projects for the launcher. One row per project, never per page.
 #[tauri::command]
 pub fn list_projects(db: State<'_, Db>) -> Result<Vec<db::ProjectHit>> {

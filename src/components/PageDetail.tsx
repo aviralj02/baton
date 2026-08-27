@@ -1,11 +1,12 @@
+import { useState } from "react";
 import type { Page, PageHit, WikiLink } from "../types";
 import { relativeTime } from "../Launcher";
 import { Dot } from "./Dot";
 
 /**
  * A wiki page, read from its file. There is no edit mode: pages are written by
- * the agent that did the work, or by hand in an editor, so the only write this
- * view offers is opening the file in whatever owns `.md`.
+ * the agent that did the work, or by hand in an editor, so the only writes this
+ * view offers are opening the file in whatever owns `.md`, and deleting it.
  */
 export function PageDetail({
   page,
@@ -13,15 +14,18 @@ export function PageDetail({
   onOpenPage,
   onCopy,
   onOpenFile,
+  onDelete,
 }: {
   page: Page;
   backlinks: PageHit[];
   onOpenPage: (id: string) => void;
   onCopy: () => void;
   onOpenFile: () => void;
+  onDelete: () => void;
 }) {
   const { frontmatter: fm } = page;
   const outgoing = dedupe(page.links);
+  const [confirming, setConfirming] = useState(false);
 
   return (
     <div className="flex h-full flex-col">
@@ -46,18 +50,51 @@ export function PageDetail({
           <p className="mt-1 truncate font-mono text-[11px] text-neutral-400">{page.id}</p>
         </div>
 
-        <button
-          onClick={onOpenFile}
-          className="shrink-0 cursor-pointer rounded-md px-2.5 py-1 text-xs transition-all duration-150 hover:bg-black/5 active:scale-[0.98] dark:text-neutral-300 dark:hover:bg-white/10"
-        >
-          Open file
-        </button>
-        <button
-          onClick={onCopy}
-          className="shrink-0 cursor-pointer rounded-md bg-neutral-900 px-2.5 py-1 text-xs font-medium text-white transition-all duration-150 hover:bg-neutral-700 active:scale-[0.98] dark:bg-white dark:text-neutral-900 dark:hover:bg-neutral-200"
-        >
-          Copy
-        </button>
+        {confirming ? (
+          // Replaces the whole button group rather than sitting beside it, so
+          // the next click cannot land on Copy by muscle memory.
+          <div className="flex shrink-0 items-center gap-2">
+            <span className="text-xs text-neutral-500 dark:text-neutral-400">
+              Move to Trash?
+            </span>
+            <button
+              onClick={() => {
+                setConfirming(false);
+                onDelete();
+              }}
+              className="cursor-pointer rounded-md bg-red-600 px-2.5 py-1 text-xs font-medium text-white transition-all duration-150 hover:bg-red-700 active:scale-[0.98]"
+            >
+              Delete
+            </button>
+            <button
+              onClick={() => setConfirming(false)}
+              className="cursor-pointer px-1 text-xs text-neutral-500 transition-all duration-150 hover:underline"
+            >
+              Cancel
+            </button>
+          </div>
+        ) : (
+          <>
+            <button
+              onClick={() => setConfirming(true)}
+              className="shrink-0 cursor-pointer rounded-md px-2.5 py-1 text-xs text-neutral-500 transition-all duration-150 hover:bg-black/5 hover:text-red-600 active:scale-[0.98] dark:text-neutral-400 dark:hover:bg-white/10 dark:hover:text-red-400"
+            >
+              Delete
+            </button>
+            <button
+              onClick={onOpenFile}
+              className="shrink-0 cursor-pointer rounded-md px-2.5 py-1 text-xs transition-all duration-150 hover:bg-black/5 active:scale-[0.98] dark:text-neutral-300 dark:hover:bg-white/10"
+            >
+              Open file
+            </button>
+            <button
+              onClick={onCopy}
+              className="shrink-0 cursor-pointer rounded-md bg-neutral-900 px-2.5 py-1 text-xs font-medium text-white transition-all duration-150 hover:bg-neutral-700 active:scale-[0.98] dark:bg-white dark:text-neutral-900 dark:hover:bg-neutral-200"
+            >
+              Copy
+            </button>
+          </>
+        )}
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5">
