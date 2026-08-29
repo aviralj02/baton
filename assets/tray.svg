@@ -1,0 +1,11 @@
+<!--
+  The menu bar icon, rendered to src-tauri/icons/tray.png at 44 by 44.
+
+  Must stay monochrome on transparent. macOS template images are drawn from the
+  alpha channel alone and tinted to match the menu bar, so the app icon cannot
+  be reused here: its opaque squircle would render as a solid black block.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" width="44" height="44" viewBox="0 0 24 24" fill="none">
+  <path d="M9.75 14.25 18 6" stroke="#000" stroke-width="3.5" stroke-linecap="round"/>
+  <path d="M4.5 15.75 7.75 12.5" stroke="#000" stroke-width="2.25" stroke-linecap="round" opacity="0.4"/>
+</svg>

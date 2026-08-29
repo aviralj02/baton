@@ -27,7 +27,9 @@ pub fn build(app: &App) -> tauri::Result<()> {
     let menu = Menu::with_items(app, &[&open, &at_login, &quit])?;
 
     TrayIconBuilder::with_id("main-tray")
-        .icon(app.default_window_icon().unwrap().clone())
+        // Not the app icon: a template image is drawn from its alpha alone, so
+        // the opaque squircle would render as a solid block in the menu bar.
+        .icon(tauri::image::Image::from_bytes(include_bytes!("../icons/tray.png"))?)
         .icon_as_template(true)
         .menu(&menu)
         .show_menu_on_left_click(true)
