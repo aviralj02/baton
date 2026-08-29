@@ -240,6 +240,52 @@ pub fn copy_primer(app: tauri::AppHandle, project: Option<String>) -> Result<pri
 }
 
 
+// ------------------------------------------------------------- settings
+
+/// Problems recorded before a window existed to show them.
+#[tauri::command]
+pub fn take_notices(app: tauri::AppHandle) -> Vec<String> {
+    crate::notice::take(&app)
+}
+
+/// The summon shortcut, as an accelerator string.
+#[tauri::command]
+pub fn get_shortcut(app: tauri::AppHandle) -> Result<String> {
+    let dir = app.path().app_data_dir().map_err(|e| db::DbError::Path(e.to_string()))?;
+    Ok(crate::settings::load(&dir).shortcut)
+}
+
+/// Register a new summon shortcut and persist it.
+///
+/// The old one is released first: leaving it registered would give the launcher
+/// two hotkeys, one of which the user believes they removed. Persisted only
+/// after registration succeeds, so a rejected combination cannot survive a
+/// restart as a shortcut that does nothing.
+#[tauri::command]
+pub fn set_shortcut(app: tauri::AppHandle, accelerator: String) -> std::result::Result<(), String> {
+    use tauri_plugin_global_shortcut::GlobalShortcutExt;
+
+    let next = crate::settings::parse(&accelerator)?;
+    let dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    let active = app.state::<crate::settings::Active>();
+    let previous = *active.0.lock().map_err(|e| e.to_string())?;
+
+    if next == previous {
+        return Ok(());
+    }
+
+    let _ = app.global_shortcut().unregister(previous);
+    if app.global_shortcut().register(next).is_err() {
+        // Put the old one back rather than leaving the user with no hotkey.
+        let _ = app.global_shortcut().register(previous);
+        return Err(format!("{accelerator} is already taken by another app"));
+    }
+
+    *active.0.lock().map_err(|e| e.to_string())? = next;
+    crate::settings::save(&dir, &crate::settings::Settings { shortcut: accelerator })
+        .map_err(|e| e.to_string())
+}
+
 // ------------------------------------------------------- first-run setup
 
 /// Whether the wiki and the `/baton` skill exist yet. Drives the setup screen.

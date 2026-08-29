@@ -4,6 +4,7 @@ import * as api from "./lib/api";
 import { relativeTime } from "./lib/time";
 import { PageDetail } from "./components/PageDetail";
 import { Setup, useSetupGate } from "./components/Setup";
+import { Settings, prettify } from "./components/Settings";
 import { Logo } from "./components/Logo";
 import { Tooltip } from "./components/Tooltip";
 import { SUMMON_LABEL } from "./lib/platform";
@@ -12,6 +13,7 @@ import {
   InstallIcon,
   RefreshIcon,
   SearchIcon,
+  SettingsIcon,
   TrashIcon,
   TypeIcon,
   TYPE_LABEL,
@@ -28,10 +30,11 @@ export default function Browser() {
   const [toast, setToast] = useState<string | null>(null);
 
   const [pending, setPending] = useState<"rebuild" | "wipe" | null>(null);
+  const [showSettings, setShowSettings] = useState(false);
+  const [shortcut, setShortcut] = useState(SUMMON_LABEL);
   // A fresh install has no pages and no way to write one; setup is the only
   // useful thing to show until the /baton command exists.
   const setup = useSetupGate();
-  const [showSetup, setShowSetup] = useState(false);
 
   const reload = useCallback(async (q: string) => {
     try {
@@ -54,6 +57,23 @@ export default function Browser() {
   }, [query, reload]);
 
   useEffect(() => {
+    api
+      .getShortcut()
+      .then((a) => setShortcut(prettify(a)))
+      .catch(() => {});
+  }, [showSettings]);
+
+  // Anything that went wrong before a window existed to say so.
+  useEffect(() => {
+    api
+      .takeNotices()
+      .then((queued) => queued.forEach(setToast))
+      .catch(() => {});
+    const un = api.onNotice(setToast);
+    return () => void un.then((f) => f());
+  }, []);
+
+  useEffect(() => {
     if (toast) {
       const t = setTimeout(() => setToast(null), 2000);
       return () => clearTimeout(t);
@@ -67,6 +87,7 @@ export default function Browser() {
         api.pageBacklinks(id),
       ]);
       setSelected({ kind: "page", page, backlinks });
+      setShowSettings(false);
     } catch (e) {
       setToast(String(e));
     }
@@ -89,7 +110,7 @@ export default function Browser() {
     }
   };
 
-  if ((setup.needed || showSetup) && setup.status) {
+  if (setup.needed && setup.status) {
     return (
       <div className="flex h-screen w-screen flex-col bg-white text-stone-900 dark:bg-stone-900 dark:text-stone-100">
         <header
@@ -99,7 +120,6 @@ export default function Browser() {
         <Setup
           status={setup.status}
           onDone={() => {
-            setShowSetup(false);
             setup.dismiss();
             setup.refresh();
             void reload(query);
@@ -142,6 +162,12 @@ export default function Browser() {
             <InstallIcon size={15} />
           </IconButton>
           <IconButton
+            label="Change the summon shortcut"
+            onClick={() => setShowSettings((v) => !v)}
+          >
+            <SettingsIcon size={15} />
+          </IconButton>
+          <IconButton
             label="Re-scan ~/Baton for new and edited pages"
             onClick={() => void api.syncWiki().then(() => reload(query))}
           >
@@ -175,7 +201,9 @@ export default function Browser() {
               name={name}
               count={group.length}
               // A search should not require reopening every folder to see hits.
-              defaultOpen={Boolean(query.trim()) || group.some((h) => h.id === selectedId)}
+              defaultOpen={
+                Boolean(query.trim()) || group.some((h) => h.id === selectedId)
+              }
               onDelete={
                 slug
                   ? async () => {
@@ -207,9 +235,8 @@ export default function Browser() {
             {pending === "rebuild" && (
               <div className="px-1">
                 <p className="text-[11px] leading-relaxed text-stone-500 dark:text-stone-400">
-                  Rebuild the search index from the files in ~/Baton? Nothing is
-                  deleted — the markdown is the source of truth and the index is
-                  derived from it.
+                  Rebuild the search index from the files in ~/Baton? Nothing is deleted —
+                  the markdown is the source of truth and the index is derived from it.
                 </p>
                 <div className="mt-2 flex gap-2">
                   <button
@@ -246,9 +273,9 @@ export default function Browser() {
               <div className="px-1">
                 <p className="text-[11px] leading-relaxed text-stone-500 dark:text-stone-400">
                   Move every project and constraint in ~/Baton to the Trash?
-                  {pages.length > 0 && ` That is ${pages.length} page${pages.length === 1 ? "" : "s"}.`}{" "}
-                  Your schema stays, and everything else can be put back from the
-                  Trash.
+                  {pages.length > 0 &&
+                    ` That is ${pages.length} page${pages.length === 1 ? "" : "s"}.`}{" "}
+                  Your schema stays, and everything else can be put back from the Trash.
                 </p>
                 <ConfirmRow
                   label="Move all to Trash"
@@ -286,7 +313,9 @@ export default function Browser() {
         </aside>
 
         <main className="min-w-0 flex-1">
-          {selected?.kind === "page" ? (
+          {showSettings ? (
+            <Settings onNotice={setToast} />
+          ) : selected?.kind === "page" ? (
             <PageDetail
               page={selected.page}
               backlinks={selected.backlinks}
@@ -324,7 +353,7 @@ export default function Browser() {
               <p className="max-w-xs text-sm leading-relaxed text-stone-400 dark:text-stone-500">
                 Pick a page to read it, or press{" "}
                 <kbd className="rounded border border-black/10 bg-black/3 px-1 py-px font-mono text-[11px] dark:border-white/10 dark:bg-white/5">
-                  {SUMMON_LABEL}
+                  {shortcut}
                 </kbd>{" "}
                 anywhere to copy a whole project.
               </p>
@@ -492,7 +521,11 @@ function ProjectGroup({
           </button>
         )}
       </div>
-      {open && <div className="ml-2 border-l border-black/5 pl-1 dark:border-white/5">{children}</div>}
+      {open && (
+        <div className="ml-2 border-l border-black/5 pl-1 dark:border-white/5">
+          {children}
+        </div>
+      )}
     </section>
   );
 }

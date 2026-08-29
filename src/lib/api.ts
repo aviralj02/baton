@@ -63,8 +63,7 @@ export const searchPages = (query: string) =>
   invoke<PageHit[]>("search_pages", { query });
 
 /** Pages that link to this one. */
-export const pageBacklinks = (id: string) =>
-  invoke<PageHit[]>("page_backlinks", { id });
+export const pageBacklinks = (id: string) => invoke<PageHit[]>("page_backlinks", { id });
 
 /** The page itself, read from the file rather than from the index. */
 export const readPage = (id: string) => invoke<Page>("read_page", { id });
@@ -90,6 +89,22 @@ export const onLauncherShown = (fn: () => void) => listen("launcher-shown", fn);
  */
 export const onWikiChanged = (fn: () => void) => listen("wiki-changed", fn);
 
+// --- settings -----------------------------------------------------------
+
+/** The summon shortcut as an accelerator string, e.g. "CmdOrCtrl+Shift+Space". */
+export const getShortcut = () => invoke<string>("get_shortcut");
+
+/** Registers and persists a new summon shortcut. Rejects one already taken. */
+export const setShortcut = (accelerator: string) =>
+  invoke<void>("set_shortcut", { accelerator });
+
+/** Problems recorded before a window existed to show them. Drains the queue. */
+export const takeNotices = () => invoke<string[]>("take_notices");
+
+/** Problems raised while a window is open. */
+export const onNotice = (fn: (message: string) => void) =>
+  listen<string>("baton://notice", (e) => fn(e.payload));
+
 // --- first-run setup ----------------------------------------------------
 
 export const wikiStatus = () => invoke<WikiStatus>("wiki_status");
@@ -98,4 +113,3 @@ export const wikiStatus = () => invoke<WikiStatus>("wiki_status");
 export const installSkills = () => invoke<string[]>("install_skills");
 
 export const revealWiki = () => invoke<void>("reveal_wiki");
-

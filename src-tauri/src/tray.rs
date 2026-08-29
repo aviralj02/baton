@@ -23,15 +23,23 @@ pub fn build(app: &App) -> tauri::Result<()> {
         app.autolaunch().is_enabled().unwrap_or(false),
         None::<&str>,
     )?;
+    let updates = MenuItem::with_id(app, "updates", "Check for updates…", true, None::<&str>)?;
     let quit = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
-    let menu = Menu::with_items(app, &[&open, &at_login, &quit])?;
+    let menu = Menu::with_items(app, &[&open, &at_login, &updates, &quit])?;
 
-    TrayIconBuilder::with_id("main-tray")
-        // Not the app icon: a template image is drawn from its alpha alone, so
-        // the opaque squircle would render as a solid block in the menu bar.
+    let tray = TrayIconBuilder::with_id("main-tray");
+
+    // A template is drawn from its alpha alone, so the app icon would be a solid block.
+    #[cfg(target_os = "macos")]
+    let tray = tray
         .icon(tauri::image::Image::from_bytes(include_bytes!("../icons/tray.png"))?)
-        .icon_as_template(true)
-        .menu(&menu)
+        .icon_as_template(true);
+
+    // Windows ignores the template flag, and pure black vanishes on a dark taskbar.
+    #[cfg(not(target_os = "macos"))]
+    let tray = tray.icon(app.default_window_icon().unwrap().clone());
+
+    tray.menu(&menu)
         .show_menu_on_left_click(true)
         .on_menu_event(move |app, event| match event.id.as_ref() {
             "open" => crate::launcher::show(app),
@@ -47,6 +55,10 @@ pub fn build(app: &App) -> tauri::Result<()> {
                     // matching the system rather than the failed request.
                     let _ = at_login.set_checked(manager.is_enabled().unwrap_or(false));
                 }
+            }
+            "updates" => {
+                let handle = app.clone();
+                tauri::async_runtime::spawn(crate::update::check(handle, true));
             }
             "quit" => app.exit(0),
             _ => {}

@@ -4,12 +4,7 @@
  * src-tauri/src/db.rs for everything derived from it.
  */
 export type PageType =
-  | "project"
-  | "decision"
-  | "open"
-  | "attempt"
-  | "component"
-  | "gotcha";
+  "project" | "decision" | "open" | "attempt" | "component" | "gotcha";
 
 export type PageStatus = "current" | "superseded" | "abandoned" | "stale";
 

@@ -3,14 +3,7 @@ import type { Page, PageHit, WikiLink } from "../types";
 import { relativeTime } from "../lib/time";
 import { Dot } from "./Dot";
 import { Tooltip } from "./Tooltip";
-import {
-  CopyIcon,
-  FileIcon,
-  LinkIcon,
-  TrashIcon,
-  TypeIcon,
-  TYPE_LABEL
-} from "./Icon";
+import { CopyIcon, FileIcon, LinkIcon, TrashIcon, TypeIcon, TYPE_LABEL } from "./Icon";
 
 /**
  * A wiki page, read from its file. There is no edit mode: pages are written by
@@ -23,7 +16,7 @@ export function PageDetail({
   onOpenPage,
   onCopy,
   onOpenFile,
-  onDelete
+  onDelete,
 }: {
   page: Page;
   backlinks: PageHit[];
@@ -40,9 +33,7 @@ export function PageDetail({
     <div className="flex h-full flex-col">
       <div className="flex items-start justify-between gap-3 border-b border-black/10 px-6 py-4 dark:border-white/10">
         <div className="min-w-0 flex-1">
-          <h1 className="truncate text-lg font-medium">
-            {page.title || page.id}
-          </h1>
+          <h1 className="truncate text-lg font-medium">{page.title || page.id}</h1>
           <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-stone-500 dark:text-stone-400">
             <span className="flex items-center gap-1.5 text-stone-600 dark:text-stone-300">
               <TypeIcon type={fm.type} size={13} className="text-brand" />
@@ -167,7 +158,7 @@ function GhostButton({
   label,
   danger,
   onClick,
-  children
+  children,
 }: {
   label: string;
   danger?: boolean;
@@ -211,7 +202,7 @@ function Tag({ children }: { children: React.ReactNode }) {
 function LinkList({
   heading,
   empty,
-  children
+  children,
 }: {
   heading: string;
   empty: string;
@@ -235,7 +226,7 @@ function LinkRow({
   label,
   target,
   broken,
-  onOpenPage
+  onOpenPage,
 }: {
   label: string;
   target: string;

@@ -54,6 +54,11 @@ jobs:
       - uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Signs the updater manifest. Not code signing: this is the key the
+          # installed app checks before replacing itself, and without it the
+          # build fails rather than shipping an unverifiable update.
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
           # TODO when the Apple Developer account exists: add these four repo
           # secrets and the build is notarised with no further changes here.
           # APPLE_CERTIFICATE: base64 of the exported Developer ID .p12
@@ -64,7 +69,8 @@ jobs:
         with:
           tagName: ${{ github.ref_name }}
           releaseName: "Baton ${{ github.ref_name }}"
-          releaseBody: "See CHANGELOG. These builds are not yet signed. On Windows, choose More info → Run anyway. On macOS, open the app once, then approve it in System Settings → Privacy & Security → Open Anyway (Control-click no longer works, and the button only appears for about an hour after the blocked launch)."
+          releaseBody: "See CHANGELOG.md for what changed. These builds are not yet signed. On Windows, choose More info → Run anyway. On macOS, open the app once, then approve it in System Settings → Privacy & Security → Open Anyway (Control-click no longer works, and the button only appears for about an hour after the blocked launch)."
+          includeUpdaterJson: true
           releaseDraft: true
           prerelease: true
           args: ${{ matrix.args }}

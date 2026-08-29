@@ -4,6 +4,7 @@ import * as api from "./lib/api";
 import { Logo } from "./components/Logo";
 import { IS_MAC } from "./lib/platform";
 import { ReturnIcon } from "./components/Icon";
+import { Key } from "./components/Key";
 import type { ProjectHit } from "./types";
 
 export default function Launcher() {
@@ -139,7 +140,11 @@ export default function Launcher() {
           {rows.length > 0 && (
             <Group heading={trimmed ? "Results" : "Projects"}>
               {rows.map((r) => (
-                <ProjectItem key={r.slug} hit={r} onSelect={() => void copyProject(r.slug)} />
+                <ProjectItem
+                  key={r.slug}
+                  hit={r}
+                  onSelect={() => void copyProject(r.slug)}
+                />
               ))}
             </Group>
           )}
@@ -153,7 +158,7 @@ export default function Launcher() {
 
         <Footer>
           <Key>↑↓</Key>
-          <span>Move</span>
+          <span className="mr-2">Move</span>
           <Key>esc</Key>
           <span>Close</span>
         </Footer>
@@ -203,7 +208,13 @@ function Group({ heading, children }: { heading: string; children: React.ReactNo
 const ITEM_BASE =
   "relative cursor-default rounded-md px-3 py-2 text-sm text-stone-700 transition-colors duration-100 before:absolute before:left-0 before:top-1/2 before:h-4 before:w-0.5 before:-translate-y-1/2 before:scale-y-0 before:rounded-full before:bg-brand before:transition-transform before:duration-150 data-[selected=true]:bg-stone-900/5 data-[selected=true]:before:scale-y-100 dark:text-stone-200 dark:data-[selected=true]:bg-white/10";
 
-function Item({ children, onSelect }: { children: React.ReactNode; onSelect: () => void }) {
+function Item({
+  children,
+  onSelect,
+}: {
+  children: React.ReactNode;
+  onSelect: () => void;
+}) {
   return (
     <Command.Item onSelect={onSelect} className={`${ITEM_BASE} flex items-center gap-2`}>
       {children}
@@ -245,14 +256,5 @@ function Footer({ children }: { children: React.ReactNode }) {
     <div className="flex items-center gap-1.5 border-t border-black/5 px-4 py-2 text-[11px] text-stone-400 dark:border-white/5 dark:text-stone-500">
       {children}
     </div>
-  );
-}
-
-/** A keycap, so a hint reads as something to press rather than something to know. */
-function Key({ children }: { children: React.ReactNode }) {
-  return (
-    <kbd className="ml-2 rounded border border-black/10 bg-black/3 px-1 py-px font-mono text-[10px] leading-4 first:ml-0 dark:border-white/10 dark:bg-white/5">
-      {children}
-    </kbd>
   );
 }

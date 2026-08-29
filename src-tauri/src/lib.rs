@@ -3,10 +3,13 @@ mod db;
 mod index_md;
 mod launcher;
 mod lint;
+mod notice;
 mod onboarding;
 pub mod primer;
 mod remove;
+mod settings;
 mod tray;
+mod update;
 mod watcher;
 /// Public so the reader half of the wiki can be exercised before any command
 /// wires it up.
@@ -24,21 +27,10 @@ pub fn wiki_root(app: &tauri::AppHandle) -> std::result::Result<std::path::PathB
 }
 
 use tauri::Manager;
-use tauri_plugin_global_shortcut::{Code, Modifiers, Shortcut, ShortcutState};
-
-/// Default summon shortcut. Cmd+Shift+Space on macOS, Ctrl+Shift+Space elsewhere.
-/// Milestone 1 task: make this user-configurable and persist it.
-fn default_shortcut() -> Shortcut {
-    #[cfg(target_os = "macos")]
-    let mods = Modifiers::SUPER | Modifiers::SHIFT;
-    #[cfg(not(target_os = "macos"))]
-    let mods = Modifiers::CONTROL | Modifiers::SHIFT;
-
-    Shortcut::new(Some(mods), Code::Space)
-}
+use tauri_plugin_global_shortcut::ShortcutState;
 
 /// True only where an installed app lives; `tauri build` also outputs under `target/`.
-fn is_installed() -> bool {
+pub fn is_installed() -> bool {
     let Ok(exe) = std::env::current_exe() else {
         return false;
     };
@@ -90,6 +82,8 @@ fn default_to_launching_at_login(app: &tauri::AppHandle, data_dir: &std::path::P
         // Not fatal, and not worth a dialog: the hotkey still works for this
         // session. Leaving the marker unwritten means the next launch retries.
         eprintln!("[baton] could not add the login item: {e}");
+        // Deliberately stderr only: nobody asked for a login item, so a failure
+        // to add one is not worth interrupting a first launch over.
         return;
     }
     let _ = std::fs::write(&marker, "");
@@ -97,15 +91,16 @@ fn default_to_launching_at_login(app: &tauri::AppHandle, data_dir: &std::path::P
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    let summon = default_shortcut();
-
     let mut builder = tauri::Builder::default();
 
     #[cfg(desktop)]
     {
-        builder = builder.plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
-            launcher::show(app);
-        }));
+        builder = builder
+            .plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
+                launcher::show(app);
+            }))
+            .plugin(tauri_plugin_updater::Builder::new().build())
+            .plugin(tauri_plugin_process::init());
     }
 
     #[cfg(target_os = "macos")]
@@ -123,8 +118,12 @@ pub fn run() {
         ))
         .plugin(
             tauri_plugin_global_shortcut::Builder::new()
-                .with_handler(move |app, shortcut, event| {
-                    if event.state() == ShortcutState::Pressed && shortcut == &summon {
+                .with_handler(|app, shortcut, event| {
+                    // Compared against state, not a value captured at boot, so a
+                    // shortcut changed at runtime takes effect without a restart.
+                    let active = app.state::<settings::Active>();
+                    let matches = active.0.lock().map(|s| *s == *shortcut).unwrap_or(false);
+                    if event.state() == ShortcutState::Pressed && matches {
                         launcher::toggle(app);
                     }
                 })
@@ -134,6 +133,8 @@ pub fn run() {
             // Dock-less on macOS. `skipTaskbar` in tauri.conf.json covers Windows.
             #[cfg(target_os = "macos")]
             app.set_activation_policy(tauri::ActivationPolicy::Accessory);
+
+            app.manage(notice::Queue::default());
 
             let dir = app.path().app_data_dir().map_err(|e| {
                 format!("no app data dir: {e}")
@@ -146,13 +147,25 @@ pub fn run() {
             tray::build(app)?;
 
             use tauri_plugin_global_shortcut::GlobalShortcutExt;
-            // Registration can fail if another app already owns the combo.
-            // Reported, not fatal: the tray still opens the launcher.
+            let saved = settings::load(&dir);
+            let summon = settings::parse(&saved.shortcut)
+                .unwrap_or_else(|_| settings::parse(settings::DEFAULT_SHORTCUT).unwrap());
+            app.manage(settings::Active(std::sync::Mutex::new(summon)));
+
+            // Registration fails when another app already owns the combination.
+            // Not fatal, and now sayable: the tray still opens the launcher.
             if let Err(e) = app.global_shortcut().register(summon) {
-                eprintln!("[baton] could not register {summon:?}: {e}");
+                notice::report(
+                    app.handle(),
+                    format!(
+                        "Could not register {}: {e}. Another app may own it. Open Baton to pick another.",
+                        saved.shortcut
+                    ),
+                );
             }
 
             launcher::configure(app.handle());
+            update::check_quietly_on_launch(app.handle());
 
             let conn = db::open(&dir.join("baton.sqlite3"))?;
             app.manage(db::Db(std::sync::Mutex::new(conn)));
@@ -177,7 +190,7 @@ pub fn run() {
                 // session with no watcher and no index regeneration, silently.
                 if let Ok(root) = wiki_root(&handle) {
                     if let Err(e) = index_md::regenerate(&root) {
-                        eprintln!("[baton] could not rewrite index.md: {e}");
+                        notice::report(&handle, format!("Could not rewrite index.md: {e}"));
                     }
                     watcher::spawn(&handle, root);
                 }
@@ -185,13 +198,13 @@ pub fn run() {
                 match swept {
                     Ok(report) => {
                         for error in &report.errors {
-                            eprintln!("[baton] wiki page skipped: {error}");
+                            notice::report(&handle, format!("Page skipped: {error}"));
                         }
                         // Only watch once the first index succeeded — watching a
                         // folder we could not read would emit change events
                         // against an index that was never built.
                     }
-                    Err(e) => eprintln!("[baton] wiki sync failed: {e}"),
+                    Err(e) => notice::report(&handle, format!("Could not read ~/Baton: {e}")),
                 }
             });
 
@@ -233,6 +246,9 @@ pub fn run() {
             commands::delete_page,
             commands::delete_project,
             commands::delete_everything,
+            commands::take_notices,
+            commands::get_shortcut,
+            commands::set_shortcut,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

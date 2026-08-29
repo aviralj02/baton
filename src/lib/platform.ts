@@ -7,8 +7,5 @@ import { platform } from "@tauri-apps/plugin-os";
  */
 export const IS_MAC = platform() === "macos";
 
-export const ENTER_LABEL = IS_MAC ? "↵" : "Enter";
-
 /** The summon shortcut as printed on a keycap. Mirrors `default_shortcut` in lib.rs. */
 export const SUMMON_LABEL = IS_MAC ? "⌘⇧Space" : "Ctrl⇧Space";
-

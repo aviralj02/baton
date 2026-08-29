@@ -15,13 +15,7 @@ import type { WikiStatus } from "../types";
  * own data). Installing the skill writes into another tool's config, so it
  * stays an explicit action.
  */
-export function Setup({
-  status,
-  onDone,
-}: {
-  status: WikiStatus;
-  onDone: () => void;
-}) {
+export function Setup({ status, onDone }: { status: WikiStatus; onDone: () => void }) {
   const [busy, setBusy] = useState(false);
   const [installed, setInstalled] = useState<string[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -45,14 +39,15 @@ export function Setup({
     <div className="flex h-full flex-col overflow-y-auto px-6 py-5">
       <div className="mb-4 flex items-center gap-2.5">
         <Logo size={20} />
-        <h1 className="text-[15px] font-medium dark:text-stone-100">
-          Set up Baton
-        </h1>
+        <h1 className="text-[15px] font-medium dark:text-stone-100">Set up Baton</h1>
       </div>
 
       <p className="mb-5 text-sm leading-relaxed text-stone-600 dark:text-stone-300">
-        Baton reads a wiki that your coding agent writes. It never calls a model
-        itself — so the agent needs a <code className="rounded bg-black/5 px-1 py-0.5 text-[12px] dark:bg-white/10">/baton</code>{" "}
+        Baton reads a wiki that your coding agent writes. It never calls a model itself —
+        so the agent needs a{" "}
+        <code className="rounded bg-black/5 px-1 py-0.5 text-[12px] dark:bg-white/10">
+          /baton
+        </code>{" "}
         command to file what it learned.
       </p>
 
@@ -72,8 +67,8 @@ export function Setup({
       >
         {detected.length === 0 ? (
           <p className="text-[13px] text-stone-500 dark:text-stone-400">
-            No agent tools found. Install Claude Code, Codex, or Cursor, then
-            reopen this screen.
+            No agent tools found. Install Claude Code, Codex, or Cursor, then reopen this
+            screen.
           </p>
         ) : (
           <>
@@ -94,7 +89,9 @@ export function Setup({
                   </span>
                   {s.name}
                   {s.outdated && (
-                    <span className="text-[11px] text-stone-400 dark:text-stone-500">needs updating</span>
+                    <span className="text-[11px] text-stone-400 dark:text-stone-500">
+                      needs updating
+                    </span>
                   )}
                 </li>
               ))}
@@ -105,7 +102,9 @@ export function Setup({
                 disabled={busy}
                 className="cursor-pointer rounded-md bg-brand px-2.5 py-1 text-xs font-medium text-white transition-all duration-150 hover:bg-brand-strong active:scale-[0.98] disabled:opacity-50 dark:text-stone-900"
               >
-                {busy ? "Installing…" : `Install for ${missing.length} tool${missing.length > 1 ? "s" : ""}`}
+                {busy
+                  ? "Installing…"
+                  : `Install for ${missing.length} tool${missing.length > 1 ? "s" : ""}`}
               </button>
             )}
             {installed && (
@@ -126,9 +125,8 @@ export function Setup({
           <code className="rounded bg-black/5 px-1 py-0.5 text-[12px] dark:bg-white/10">
             /baton
           </code>
-          . It files what the session learned without asking. After that,
-          press the hotkey anywhere to copy a project's context into a fresh
-          session.
+          . It files what the session learned without asking. After that, press the hotkey
+          anywhere to copy a project's context into a fresh session.
         </p>
       </Step>
 
@@ -178,7 +176,10 @@ export function useSetupGate() {
   const [dismissed, setDismissed] = useState(false);
 
   const refresh = () => {
-    api.wikiStatus().then(setStatus).catch(() => setStatus(null));
+    api
+      .wikiStatus()
+      .then(setStatus)
+      .catch(() => setStatus(null));
   };
 
   useEffect(refresh, []);

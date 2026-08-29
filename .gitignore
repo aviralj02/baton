@@ -25,3 +25,7 @@ dist-ssr
 
 # Build output
 dist/
+
+# Updater signing keys never belong in the repo
+*.key
+*.key.pub
