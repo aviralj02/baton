@@ -70,6 +70,11 @@ fn apply_background_effect(app: &AppHandle) {
 }
 
 pub fn show(app: &AppHandle) {
+    // The bar is well under 100ms from keypress to visible. Printed in dev
+    // builds only, because the number is only defensible if it is measured.
+    #[cfg(debug_assertions)]
+    let started = std::time::Instant::now();
+
     LAST_SHOWN_MS.store(now_ms(), Ordering::Relaxed);
     let _ = app.emit(SHOWN_EVENT, ());
 
@@ -82,6 +87,9 @@ pub fn show(app: &AppHandle) {
         let _ = win.show();
         let _ = win.set_focus();
     }
+
+    #[cfg(debug_assertions)]
+    eprintln!("[baton] launcher shown in {:?}", started.elapsed());
 }
 
 pub fn hide(app: &AppHandle) {
