@@ -17,8 +17,9 @@ pnpm install
 pnpm install-baton           # install /baton, create ~/Baton
 pnpm tauri dev               # run the app
 pnpm build                   # frontend typecheck + build
-cd src-tauri && cargo test   # 84 tests
+cd src-tauri && cargo test   # 98 tests
 cd src-tauri && cargo clippy --all-targets -- -D warnings
+pnpm format:check            # prettier, also gated in CI
 ```
 
 The clippy line is the same gate CI runs, so run it before pushing or the build
@@ -106,7 +107,18 @@ stubs `dist/index.html` so it does not depend on the frontend job.
 Bump the version, push a `v*` tag, publish the draft that appears. The steps are
 in **[RELEASE.md](RELEASE.md)**.
 
+A local `pnpm tauri build` now needs the updater signing key, because
+`createUpdaterArtifacts` is on and Tauri refuses to emit an unsigned manifest:
+
+```bash
+export TAURI_SIGNING_PRIVATE_KEY="$(cat ~/.tauri/baton-updater.key)"
+export TAURI_SIGNING_PRIVATE_KEY_PASSWORD=""
+pnpm tauri build
+```
+
+`pnpm tauri dev` is unaffected. CI takes the same values from repository
+secrets.
+
 ## Not yet done
 
 - [ ] No code signing. This is stronger than a warning on macOS: Gatekeeper refuses to open an unsigned download at all. Needs an Apple Developer account; the release workflow is already wired for the secrets.
-- [ ] Windows has never had a real hands-on pass. CI now type-checks the platform branches, but nobody has watched the launcher show, the acrylic tint land, or the tray open on Windows. See [PLAN.md](PLAN.md).

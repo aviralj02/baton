@@ -18,7 +18,7 @@ Tauri v2 + React frontend + Rust core.
 pnpm install
 pnpm tauri dev               # run the app
 pnpm build                   # frontend typecheck + build
-cd src-tauri && cargo test   # 90 tests
+cd src-tauri && cargo test   # 98 tests
 ```
 
 The window starts **hidden**. Summon with `⌘⇧Space` / `Ctrl⇧Space`, or the tray icon.
@@ -60,7 +60,12 @@ organises itself, not a choice to put in front of someone mid-paste.
 5. **`skills/` is the only home for the schema and the command.** `onboarding.rs`
    embeds both with `include_str!`.
 
-6. **Never hardcode `⌘` in JSX.** Import from `src/lib/platform.ts`.
+6. **Never hardcode `⌘` in JSX.** Import from `src/lib/platform.ts`, and prefer the
+   live shortcut from `get_shortcut` over the default label where one is shown.
+
+7. **A survivable failure is a `notice::report`, not an `eprintln!`.** A packaged app
+   has no stderr, so anything the user could act on has to reach a window. Startup
+   runs before any webview exists, which is why notices queue.
 
 ## Layout
 
@@ -80,6 +85,9 @@ src-tauri/src/
   lint.rs                structural checks, surfaced in the primer
   index_md.rs            regenerate ~/Baton/index.md from the tree
   remove.rs              delete a page, a project or the lot — to the trash
+  settings.rs            the summon shortcut, persisted beside the index
+  notice.rs              problems the user needs to hear, queued until a window exists
+  update.rs              check for and install a newer Baton
   watcher.rs             reindex on change, debounced
   onboarding.rs          create the wiki, install the skill
   launcher.rs            show / hide / toggle, NSPanel, vibrancy

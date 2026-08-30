@@ -27,7 +27,23 @@ git push -u origin main
 **2. Open the Actions tab.** You should see a run called **CI** start on its own.
 Let it finish. If GitHub asks you to enable Actions for the repo first, say yes.
 
-**3. Give Actions permission to create releases.**
+**3. Add the updater signing key.**
+`Settings → Secrets and variables → Actions` → New repository secret:
+
+| Secret | Value |
+|---|---|
+| `TAURI_SIGNING_PRIVATE_KEY` | the contents of `~/.tauri/baton-updater.key` |
+| `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` | empty, unless you regenerate the key with one |
+
+This is **not** code signing. It is the key an installed Baton checks before
+replacing itself, and the public half is already committed in
+`tauri.conf.json`. Without the secret the release build fails rather than
+shipping an update nobody can verify.
+
+Keep the private key. Losing it means existing installs can never update again:
+they only trust the public key they shipped with.
+
+**4. Give Actions permission to create releases.**
 `Settings → Actions → General → Workflow permissions` → select **Read and write
 permissions** → Save. Without this the release job builds fine and then fails at
 the last step, which is a confusing way to lose fifteen minutes.

@@ -42,9 +42,9 @@ exchanges. That is the bar for every phase.
 
 ### Verified state
 
-- `cargo test --lib`: 90 passing across `wiki`, `db`, `primer`, `lint`, `index_md`,
-  `watcher`, `onboarding`, `remove`. `cargo build` has no dead-code warnings. `pnpm build` clean.
-- 18 commands, all project, page, primer, setup or delete.
+- `cargo test --lib`: 98 passing across `wiki`, `db`, `primer`, `lint`, `index_md`,
+  `watcher`, `onboarding`, `remove`, `settings`, `notice`. `cargo build` has no dead-code warnings. `pnpm build` clean.
+- 21 commands, all project, page, primer, setup, delete or settings.
 - Baton makes no model calls and contains no network code.
 - The launcher lists **projects**, one row each; `↵` copies that project's whole
   context, every page in full. Search matches project names and page titles, never
@@ -64,8 +64,17 @@ exchanges. That is the bar for every phase.
 **Before an MVP ships**
 
 - [ ] Phase 0 acceptance test in a genuinely cold session.
-- [ ] User-configurable global shortcut, persisted.
-- [ ] Measure and defend launcher show latency. Hold well under 100ms.
+- [x] User-configurable global shortcut, persisted. Recorded in the browser's
+      settings view, stored in `settings.json` beside the index, and re-registered
+      without a restart.
+- [x] Auto-update. `tauri-plugin-updater` against the GitHub releases `latest.json`,
+      checked quietly ten seconds after launch and on demand from the tray. Only an
+      installed copy checks; the release workflow signs the manifest.
+- [x] Survivable failures reach the user. A registration clash or an unreadable
+      wiki used to go to a stderr a packaged app does not have; both now queue and
+      surface as a toast.
+- [ ] Measure launcher show latency against the under-100ms bar. Dev builds now
+      print it on every summon; nobody has read the numbers yet.
 - [ ] First real Windows pass, on a real machine. `.github/workflows/ci.yml` now
       compiles the non-macOS `#[cfg]` branches on `windows-latest`, which is the cheap
       80% — but a green `cargo check` says nothing about whether the launcher

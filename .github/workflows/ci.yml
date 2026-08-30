@@ -28,6 +28,7 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - run: pnpm format:check
       # `pnpm build` is tsc + vite: this is the typecheck.
       - run: pnpm build
 
