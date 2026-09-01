@@ -1,0 +1,40 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: ui-sans-serif, -apple-system, "Segoe UI", system-ui, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
+  --color-brand: var(--brand);
+  --color-brand-strong: var(--brand-strong);
+}
+
+/* The app's palette, so the page looks like the thing it hands you. */
+:root {
+  --brand: #b8760c;
+  --brand-strong: #8f5a08;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --brand: #f2b33d;
+    --brand-strong: #ffc659;
+  }
+}
+
+.tnum {
+  font-variant-numeric: tabular-nums;
+}
+
+:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}

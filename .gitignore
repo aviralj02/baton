@@ -29,3 +29,6 @@ dist/
 # Updater signing keys never belong in the repo
 *.key
 *.key.pub
+
+# The download page's build output
+site/dist

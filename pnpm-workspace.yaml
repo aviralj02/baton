@@ -1,2 +1,7 @@
+# The root package is the app. `site` is the download page, built and deployed
+# separately, and shares nothing with it but the palette.
+packages:
+  - site
+
 allowBuilds:
   esbuild: true
