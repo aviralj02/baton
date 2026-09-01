@@ -110,9 +110,14 @@ means no installer for that platform — read the failing step's log, fix, and s
 - `Baton_0.2.0_universal.dmg` — one download for both Intel and Apple silicon Macs
 - `Baton_0.2.0_x64-setup.exe` and/or `Baton_0.2.0_x64_en-US.msi` — Windows
 
-Download and open one before publishing. Then write what changed, keep
-**pre-release** ticked while the builds are unsigned, and click **Publish
-release**.
+Download and open one before publishing. Then write what changed, say plainly in
+the notes that the builds are unsigned and what that means on each platform, and
+click **Publish release**.
+
+**Leave "Set as a pre-release" unticked.** GitHub excludes prereleases from
+`/releases/latest`, and that is the URL both the updater and the download page
+resolve. Ticking it publishes a release that no installed copy will ever find,
+and the failure is silent: the updater simply reports that Baton is up to date.
 
 ---
 
@@ -171,4 +176,5 @@ names are already referenced in `release.yml`.
 | macOS | `APPLE_CERTIFICATE`, `APPLE_CERTIFICATE_PASSWORD`, `APPLE_SIGNING_IDENTITY`, `APPLE_ID`, `APPLE_PASSWORD`, `APPLE_TEAM_ID` |
 | Windows | `WINDOWS_CERTIFICATE`, `WINDOWS_CERTIFICATE_PASSWORD` |
 
-Then drop the pre-release tick, and update the Status section in `README.md`.
+Then update the Status section in `README.md`, and delete the unsigned warning
+from the download page.

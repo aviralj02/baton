@@ -2,8 +2,9 @@
 #
 # The artefacts are UNSIGNED until the two secrets blocks below are filled in.
 # An unsigned build is not merely "not notarised": macOS Gatekeeper refuses to
-# open it at all, and SmartScreen warns on Windows. Keep the release marked as a
-# prerelease, and keep the README honest, until signing is real.
+# open it at all, and SmartScreen warns on Windows. Say so in the release notes
+# rather than marking it a prerelease: GitHub excludes prereleases from
+# /releases/latest, which is where both the updater and the download page look.
 name: Release
 
 # Deliberately tag-only: no `workflow_dispatch`. Running this from the Actions
@@ -72,5 +73,5 @@ jobs:
           releaseBody: "See CHANGELOG.md for what changed. These builds are not yet signed. On Windows, choose More info → Run anyway. On macOS, open the app once, then approve it in System Settings → Privacy & Security → Open Anyway (Control-click no longer works, and the button only appears for about an hour after the blocked launch)."
           includeUpdaterJson: true
           releaseDraft: true
-          prerelease: true
+          prerelease: false
           args: ${{ matrix.args }}
