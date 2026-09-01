@@ -103,76 +103,7 @@ function Downloads({
           .
         </p>
       )}
-
-      <FirstLaunch />
     </section>
-  );
-}
-
-/**
- * The unsigned warning.
- *
- * Without this the macOS download is a dead end: Gatekeeper refuses an unsigned
- * app outright, and since Sequoia the old Control-click bypass no longer works.
- * Sending someone to a refusal with no instructions is worse than not shipping.
- * Delete this whole component the day notarisation lands.
- */
-function FirstLaunch() {
-  const [open, setOpen] = useState(false);
-  const { reduced } = useMotionSafe();
-
-  return (
-    <div className="mt-6 overflow-hidden rounded-xl border border-black/10 bg-white/60 text-sm dark:border-white/10 dark:bg-white/5">
-      <button
-        onClick={() => setOpen((v) => !v)}
-        aria-expanded={open}
-        className="flex w-full cursor-pointer items-center gap-2.5 p-4 text-left font-medium"
-      >
-        <motion.span
-          animate={{ rotate: open ? 90 : 0 }}
-          transition={reduced ? { duration: 0 } : { duration: 0.3, ease: EASE }}
-          className="text-brand"
-          aria-hidden="true"
-        >
-          ›
-        </motion.span>
-        These builds aren&rsquo;t code-signed yet. Opening one takes an extra step.
-      </button>
-
-      <AnimatePresence initial={false}>
-        {open && (
-          <motion.div
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: "auto", opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            transition={reduced ? { duration: 0 } : { duration: 0.32, ease: EASE }}
-          >
-            <div className="space-y-3 px-4 pb-4 leading-relaxed text-stone-600 dark:text-stone-300">
-              <p>
-                <b>macOS.</b> Open Baton once and macOS will refuse it. Then go to{" "}
-                <b>System Settings &rarr; Privacy &amp; Security</b>, scroll to the
-                bottom, and click <b>Open Anyway</b>. That button only appears for about
-                an hour after the blocked launch, so do it straight away.
-              </p>
-              <p>
-                <b>Windows.</b> SmartScreen shows a warning. Click <b>More info</b>, then{" "}
-                <b>Run anyway</b>.
-              </p>
-              <p className="text-stone-500 dark:text-stone-400">
-                Both go away once the certificates are in place. Until then you can also{" "}
-                <a
-                  className="text-brand hover:underline"
-                  href={`${REPO_URL}/blob/main/docs/DEVELOPMENT.md`}
-                >
-                  build it from source
-                </a>
-                .
-              </p>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </div>
   );
 }
 
