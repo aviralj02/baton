@@ -65,12 +65,9 @@ Your agent does the writing; Baton does the remembering.
 
 **Coming soon.** Signed builds for macOS and Windows are not out yet.
 
-<!-- TODO on first release: replace the line above with this.
-| macOS | Windows |
-|---|---|
-| [Download .dmg](TODO) — Intel and Apple silicon | [Download installer](TODO) |
-
-Then run `/baton` once in any project to finish setup.
+<!-- TODO on first release: replace the line above with this, and put the real
+     domain in. The page picks the right build for the visitor's platform.
+**[Download Baton](TODO)** — then run `/baton` once in any project to finish setup.
 -->
 
 ### Build from source

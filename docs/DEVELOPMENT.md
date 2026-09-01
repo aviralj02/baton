@@ -94,6 +94,24 @@ cd /tmp/verify && cargo test
 Testing in place proves nothing about what was staged. Two commits in one
 session were broken this way and neither was caught until the method changed.
 
+### The download page
+
+`site/` is a separate Vite app, a workspace member rather than part of the
+Tauri frontend. `pnpm --filter baton-site dev` runs it.
+
+It resolves downloads at page load from the GitHub releases API, matching assets
+by extension rather than by name, because Tauri puts the version in the filename
+and a hardcoded link dies at the next release. Every button falls back to the
+releases page when that lookup fails, which it will while nothing is published.
+
+Deployed by Vercel, not from this repo's workflows. The project's **Root
+Directory** is `site`, with "include source files outside the root directory"
+enabled so the workspace lockfile resolves. Vercel detects Vite and pnpm on its
+own; `dist` is the output.
+
+It builds from the domain root, which is why `vite.config.ts` sets no `base`.
+Moving it to a subpath means setting one to match.
+
 ### CI
 
 `.github/workflows/ci.yml` runs the frontend typecheck on Linux, and
