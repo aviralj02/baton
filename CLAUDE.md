@@ -60,22 +60,64 @@ organises itself, not a choice to put in front of someone mid-paste.
 5. **`skills/` is the only home for the schema and the command.** `onboarding.rs`
    embeds both with `include_str!`.
 
-6. **Never hardcode `⌘` in JSX.** Import from `src/lib/platform.ts`, and prefer the
-   live shortcut from `get_shortcut` over the default label where one is shown.
+6. **A shortcut is rendered by `components/Shortcut.tsx`, never spelled out.** Give
+   it the accelerator `get_shortcut` returns and it draws one keycap per key,
+   falling back to `DEFAULT_SHORTCUT` from `lib/platform.ts` only until that call
+   answers. Nothing else may build a shortcut label: `IS_MAC` decides whether a
+   modifier is a drawn symbol or the word the key carries on that platform, and it
+   decides it in one file.
 
 7. **A survivable failure is a `notice::report`, not an `eprintln!`.** A packaged app
    has no stderr, so anything the user could act on has to reach a window. Startup
    runs before any webview exists, which is why notices queue.
 
+8. **Colour and type come from `src/index.css`, and nothing else.** Components use
+   the semantic utilities (`bg-surface`, `text-body`, `border-line`, `bg-brand`,
+   `text-ui`) and carry **no `dark:` variants**: the tokens themselves flip under
+   `prefers-color-scheme`, so a surface is written once. No `stone-400`, no hex, no
+   `text-[13px]`. If a value is missing, add a token here first. Anything filled
+   with a colour that does not invert pairs with its own `on-*` token, which is why
+   `--on-brand` and `--on-danger` exist. Repeated class strings become a primitive
+   in `components/`, not a fourth copy at a call site.
+
+   `site/src/index.css` repeats the colour half of this by hand, because the two
+   builds share no code. The hex values are the same on both sides and must stay
+   that way. The type scale is deliberately not shared: the app is read at a
+   glance, the page at arm's length, so the same names carry larger sizes there.
+
+9. **No character ever stands in for an icon.** Every mark in the UI is an SVG from
+   `components/Icon.tsx`, drawn on the same 16px grid at the same stroke weight, so
+   a new one cannot arrive at a different weight than its neighbours. `↑ ↓ → ← ✓ ●
+   · • ›` and friends are out, in JSX and in copy alike: they carry a different
+   weight than the icon set, they drift off the baseline, and they inherit no size
+   scale. An icon is `aria-hidden`, so anything conveying meaning on its own needs
+   a label from its container, which is what `Key`'s `label` prop is for.
+
+   Modifier keys included. `CommandIcon`, `ShiftIcon`, `ControlIcon` and
+   `OptionIcon` are paths on that same grid, because the characters arrive at the
+   mono face's weight, sit off a keycap's optical centre, and ignore the size
+   scale. `Shortcut` is the only thing that renders them.
+
+   One exception, and only because the medium cannot hold anything else: a native
+   `title` attribute or an `<option>` takes ordinary punctuation.
+
+   `grep -rn "[⌘⌃⌥⇧›→←↑↓↻↗·•★✓✗]" src/ site/src/` should return nothing but the
+   doc comments in `Icon.tsx` and `Shortcut.tsx` that name the characters in order
+   to rule them out.
+
 ## Layout
 
 ```
 src/                     React webview
+  index.css              the token layer: every colour and type size in the app
   Launcher.tsx           projects only; ↵ copies a project's whole context
   Browser.tsx            page browsing, grouped per project
   components/
     PageDetail.tsx       one page, with backlinks
     Setup.tsx            first run: wiki path, install the skill
+    Button.tsx           every text button and icon button
+    Label.tsx            the caps group label and the serif section heading
+    Shortcut.tsx         an accelerator as one drawn keycap per key
   lib/api.ts             every invoke() call lives here, nowhere else
 src-tauri/src/
   commands.rs            the whole IPC surface
@@ -92,6 +134,7 @@ src-tauri/src/
   onboarding.rs          create the wiki, install the skill
   launcher.rs            show / hide / toggle, NSPanel, vibrancy
 skills/                  the schema and the command: embedded and installable
+site/                    the download page: its own Vite build, deployed separately
 ```
 
 Storage: `~/Library/Application Support/com.aviralj02.baton/baton.sqlite3`. Four
