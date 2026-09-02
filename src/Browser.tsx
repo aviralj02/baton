@@ -4,10 +4,12 @@ import * as api from "./lib/api";
 import { relativeTime } from "./lib/time";
 import { PageDetail } from "./components/PageDetail";
 import { Setup, useSetupGate } from "./components/Setup";
-import { Settings, prettify } from "./components/Settings";
+import { ConfirmDialog } from "./components/ConfirmDialog";
+import { Settings } from "./components/Settings";
 import { Logo } from "./components/Logo";
-import { Tooltip } from "./components/Tooltip";
-import { SUMMON_LABEL } from "./lib/platform";
+import { IconButton } from "./components/Button";
+import { Shortcut } from "./components/Shortcut";
+import { DEFAULT_SHORTCUT } from "./lib/platform";
 import {
   ChevronIcon,
   InstallIcon,
@@ -23,15 +25,32 @@ import type { Page, PageHit } from "./types";
 /** Markdown files under ~/Baton are the only store; the index is derived. */
 type Selection = { kind: "page"; page: Page; backlinks: PageHit[] } | null;
 
+/**
+ * A pending confirmation. Every consequential action in this window describes
+ * itself as one of these and hands over the work, so there is one dialog on the
+ * page rather than a confirmation built into each control that needs one.
+ *
+ * `run` lets its errors escape: the dialog closes on success and stays open on
+ * failure, which is only possible if failure reaches the caller.
+ */
+type Confirm = {
+  title: string;
+  body: string;
+  confirmLabel: string;
+  variant: "primary" | "danger";
+  run: () => Promise<void>;
+};
+
 export default function Browser() {
   const [pages, setPages] = useState<PageHit[]>([]);
   const [selected, setSelected] = useState<Selection>(null);
   const [query, setQuery] = useState("");
   const [toast, setToast] = useState<string | null>(null);
 
-  const [pending, setPending] = useState<"rebuild" | "wipe" | null>(null);
+  const [confirm, setConfirm] = useState<Confirm | null>(null);
+  const [running, setRunning] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
-  const [shortcut, setShortcut] = useState(SUMMON_LABEL);
+  const [shortcut, setShortcut] = useState(DEFAULT_SHORTCUT);
   // A fresh install has no pages and no way to write one; setup is the only
   // useful thing to show until the /baton command exists.
   const setup = useSetupGate();
@@ -59,7 +78,7 @@ export default function Browser() {
   useEffect(() => {
     api
       .getShortcut()
-      .then((a) => setShortcut(prettify(a)))
+      .then(setShortcut)
       .catch(() => {});
   }, [showSettings]);
 
@@ -95,6 +114,19 @@ export default function Browser() {
 
   const selectedId = selected?.kind === "page" ? selected.page.id : null;
 
+  const runConfirmed = async () => {
+    if (!confirm) return;
+    setRunning(true);
+    try {
+      await confirm.run();
+      setConfirm(null);
+    } catch (e) {
+      setToast(String(e));
+    } finally {
+      setRunning(false);
+    }
+  };
+
   // Writes into every detected tool, overwriting whatever is there. No detection
   // to go stale, and an overwrite cannot duplicate.
   const installSkills = async () => {
@@ -112,11 +144,8 @@ export default function Browser() {
 
   if (setup.needed && setup.status) {
     return (
-      <div className="flex h-screen w-screen flex-col bg-white text-stone-900 dark:bg-stone-900 dark:text-stone-100">
-        <header
-          data-tauri-drag-region
-          className="h-11 shrink-0 border-b border-black/10 dark:border-white/10"
-        />
+      <div className="flex h-screen w-screen flex-col bg-surface text-ink">
+        <header data-tauri-drag-region className="h-11 shrink-0 border-b border-line" />
         <Setup
           status={setup.status}
           onDone={() => {
@@ -130,26 +159,26 @@ export default function Browser() {
   }
 
   return (
-    <div className="flex h-screen w-screen flex-col bg-white text-stone-900 dark:bg-stone-900 dark:text-stone-100">
+    <div className="flex h-screen w-screen flex-col bg-surface text-ink">
       <header
         data-tauri-drag-region
-        className="flex items-center gap-3 border-b border-black/10 px-4 py-2.5 dark:border-white/10"
+        className="flex h-12 shrink-0 items-center gap-3 border-b border-line px-4"
       >
-        <span className="flex items-center gap-2 text-sm font-medium">
+        <span className="flex items-center gap-2">
           <Logo size={16} className="text-brand" />
-          Baton
+          <span className="font-serif text-title tracking-tight">Baton</span>
         </span>
 
         <div className="relative ml-4">
           <SearchIcon
             size={13}
-            className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-stone-400"
+            className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-muted"
           />
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search pages"
-            className="w-64 rounded-md border border-black/10 bg-black/3 py-1 pl-7 pr-2.5 text-sm outline-none transition-colors duration-150 placeholder:text-stone-400 focus:border-brand/40 focus:bg-transparent dark:border-white/10 dark:bg-white/5 dark:placeholder:text-stone-500"
+            className="h-8 w-64 rounded-md border border-line bg-panel pl-7 pr-2.5 text-ui text-ink outline-none transition-all duration-200 placeholder:text-ui placeholder:text-muted focus:border-brand/45 focus:bg-surface"
           />
         </div>
 
@@ -177,9 +206,9 @@ export default function Browser() {
       </header>
 
       <div className="flex min-h-0 flex-1">
-        <aside className="flex w-60 shrink-0 flex-col overflow-y-auto border-r border-black/10 p-2 dark:border-white/10">
+        <aside className="flex w-64 shrink-0 flex-col overflow-y-auto border-r border-line p-3">
           {pages.length === 0 && (
-            <p className="px-2 py-6 text-center text-xs leading-relaxed text-stone-400 dark:text-stone-500">
+            <p className="px-2 py-6 text-center text-ui leading-relaxed text-muted">
               {query.trim() ? (
                 "No matches."
               ) : (
@@ -206,17 +235,22 @@ export default function Browser() {
               }
               onDelete={
                 slug
-                  ? async () => {
-                      try {
-                        // The open page may have been inside the project.
-                        if (group.some((h) => h.id === selectedId)) setSelected(null);
-                        await api.deleteProject(slug);
-                        await reload(query);
-                        setToast(`${name} moved to Trash`);
-                      } catch (e) {
-                        setToast(String(e));
-                      }
-                    }
+                  ? () =>
+                      setConfirm({
+                        title: `Move ${name} to the Trash?`,
+                        body: `${name} and its ${group.length} ${
+                          group.length === 1 ? "page" : "pages"
+                        } go to the Trash. You can put them back from there.`,
+                        confirmLabel: "Move to Trash",
+                        variant: "danger",
+                        run: async () => {
+                          // The open page may have been inside the project.
+                          if (group.some((h) => h.id === selectedId)) setSelected(null);
+                          await api.deleteProject(slug);
+                          await reload(query);
+                          setToast(`${name} moved to Trash`);
+                        },
+                      })
                   : undefined
               }
             >
@@ -231,83 +265,49 @@ export default function Browser() {
             </ProjectGroup>
           ))}
 
-          <div className="mt-auto border-t border-black/10 pt-3 dark:border-white/10">
-            {pending === "rebuild" && (
-              <div className="px-1">
-                <p className="text-[11px] leading-relaxed text-stone-500 dark:text-stone-400">
-                  Rebuild the search index from the files in ~/Baton? Nothing is deleted —
-                  the markdown is the source of truth and the index is derived from it.
-                </p>
-                <div className="mt-2 flex gap-2">
-                  <button
-                    onClick={async () => {
-                      try {
-                        setSelected(null);
-                        setPending(null);
-                        // Actually drops the index and re-reads every file. The
-                        // previous version only re-swept and still reported a
-                        // deletion, which was a false claim about a privacy
-                        // action.
-                        const report = await api.rebuildIndex();
-                        await reload(query);
-                        setToast(`Index rebuilt from ${report.indexed} pages`);
-                      } catch (e) {
-                        setToast(String(e));
-                      }
-                    }}
-                    className="cursor-pointer rounded bg-stone-900 px-2 py-1 text-[11px] font-medium text-white transition-all duration-150 hover:bg-stone-700 active:scale-[0.98] dark:bg-stone-100 dark:text-stone-900 dark:hover:bg-white"
-                  >
-                    Rebuild
-                  </button>
-                  <button
-                    onClick={() => setPending(null)}
-                    className="cursor-pointer px-1 text-[11px] text-stone-500 transition-all duration-150 hover:underline"
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {pending === "wipe" && (
-              <div className="px-1">
-                <p className="text-[11px] leading-relaxed text-stone-500 dark:text-stone-400">
-                  Move every project and constraint in ~/Baton to the Trash?
-                  {pages.length > 0 &&
-                    ` That is ${pages.length} page${pages.length === 1 ? "" : "s"}.`}{" "}
-                  Your schema stays, and everything else can be put back from the Trash.
-                </p>
-                <ConfirmRow
-                  label="Move all to Trash"
-                  onConfirm={async () => {
-                    try {
+          <div className="mt-auto flex items-center gap-1 border-t border-line pt-3">
+            <FooterAction
+              onClick={() =>
+                setConfirm({
+                  title: "Rebuild the search index?",
+                  body: "Nothing is deleted. The markdown in ~/Baton is the source of truth, and the index is read back from it.",
+                  confirmLabel: "Rebuild",
+                  variant: "primary",
+                  run: async () => {
+                    setSelected(null);
+                    const report = await api.rebuildIndex();
+                    await reload(query);
+                    setToast(`Index rebuilt from ${report.indexed} pages`);
+                  },
+                })
+              }
+            >
+              <RefreshIcon size={12} />
+              Rebuild index
+            </FooterAction>
+            {pages.length > 0 && (
+              <FooterAction
+                danger
+                onClick={() =>
+                  setConfirm({
+                    title: "Move everything to the Trash?",
+                    body: `Every project and constraint in ~/Baton, ${pages.length} ${
+                      pages.length === 1 ? "page" : "pages"
+                    } in all, goes to the Trash. Your schema stays, and anything can be put back.`,
+                    confirmLabel: "Move all to Trash",
+                    variant: "danger",
+                    run: async () => {
                       setSelected(null);
-                      setPending(null);
                       await api.deleteEverything();
                       await reload(query);
                       setToast("Everything moved to Trash");
-                    } catch (e) {
-                      setToast(String(e));
-                    }
-                  }}
-                  onCancel={() => setPending(null)}
-                />
-              </div>
-            )}
-
-            {pending === null && (
-              <div className="flex items-center gap-1 px-0.5">
-                <FooterAction onClick={() => setPending("rebuild")}>
-                  <RefreshIcon size={12} />
-                  Rebuild index
-                </FooterAction>
-                {pages.length > 0 && (
-                  <FooterAction danger onClick={() => setPending("wipe")}>
-                    <TrashIcon size={12} />
-                    Delete all
-                  </FooterAction>
-                )}
-              </div>
+                    },
+                  })
+                }
+              >
+                <TrashIcon size={12} />
+                Delete all
+              </FooterAction>
             )}
           </div>
         </aside>
@@ -335,62 +335,60 @@ export default function Browser() {
                   setToast(String(e));
                 }
               }}
-              onDelete={async () => {
-                const title = selected.page.title || readableId(selected.page.id);
-                try {
-                  setSelected(null);
-                  await api.deletePage(selected.page.id);
-                  await reload(query);
-                  setToast(`${title} moved to Trash`);
-                } catch (e) {
-                  setToast(String(e));
-                }
+              onDelete={() => {
+                const page = selected.page;
+                const title = page.title || readableId(page.id);
+                setConfirm({
+                  title: `Move ${title} to the Trash?`,
+                  body: "The markdown file goes to the Trash, and the page leaves the index. You can put it back from there.",
+                  confirmLabel: "Move to Trash",
+                  variant: "danger",
+                  run: async () => {
+                    setSelected(null);
+                    await api.deletePage(page.id);
+                    await reload(query);
+                    setToast(`${title} moved to Trash`);
+                  },
+                });
               }}
             />
           ) : (
-            <div className="flex h-full flex-col items-center justify-center gap-3 px-8 text-center">
-              <Logo size={34} className="text-stone-300 dark:text-stone-700" />
-              <p className="max-w-xs text-sm leading-relaxed text-stone-400 dark:text-stone-500">
-                Pick a page to read it, or press{" "}
-                <kbd className="rounded border border-black/10 bg-black/3 px-1 py-px font-mono text-[11px] dark:border-white/10 dark:bg-white/5">
-                  {shortcut}
-                </kbd>{" "}
-                anywhere to copy a whole project.
+            // The shortcut sits on its own line rather than inside the sentence.
+            // A keycap set into running text stretches that one line and leaves
+            // the next one tight, which is what made this read as cramped.
+            <div className="flex h-full flex-col items-center justify-center px-8 text-center">
+              <Logo size={32} className="text-muted" />
+              <p className="mt-6 font-serif text-title tracking-tight text-body">
+                Pick a page to read it.
               </p>
+              <div className="mt-7 flex items-center gap-2.5">
+                <Shortcut accelerator={shortcut} />
+                <span className="text-ui text-muted">
+                  copies a whole project, from any app
+                </span>
+              </div>
             </div>
           )}
         </main>
       </div>
 
+      <ConfirmDialog
+        open={confirm !== null}
+        title={confirm?.title ?? ""}
+        body={confirm?.body ?? ""}
+        confirmLabel={confirm?.confirmLabel ?? ""}
+        variant={confirm?.variant}
+        pending={running}
+        onConfirm={() => void runConfirmed()}
+        onCancel={() => setConfirm(null)}
+      />
+
       {toast && (
-        <div className="pointer-events-none fixed bottom-6 left-1/2 -translate-x-1/2 rounded-md bg-stone-900/90 px-3 py-1.5 text-xs text-white shadow-lg dark:bg-stone-100/95 dark:text-stone-900">
+        <div className="pointer-events-none fixed bottom-6 left-1/2 -translate-x-1/2 rounded-full bg-ink px-3.5 py-1.5 text-ui text-surface shadow-lg">
           {toast}
         </div>
       )}
     </div>
-  );
-}
-
-/** An icon-only control. The label is both the tooltip and the accessible name. */
-function IconButton({
-  label,
-  onClick,
-  children,
-}: {
-  label: string;
-  onClick: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <Tooltip label={label}>
-      <button
-        onClick={onClick}
-        aria-label={label}
-        className="cursor-pointer rounded-md p-1.5 text-stone-500 transition-all duration-150 hover:bg-black/5 hover:text-stone-900 active:scale-95 dark:text-stone-400 dark:hover:bg-white/10 dark:hover:text-stone-100"
-      >
-        {children}
-      </button>
-    </Tooltip>
   );
 }
 
@@ -406,10 +404,11 @@ function FooterAction({
   return (
     <button
       onClick={onClick}
-      className={`flex cursor-pointer items-center gap-1.5 rounded px-1.5 py-1 text-[11px] text-stone-400 transition-colors duration-150 dark:text-stone-500 ${
+      aria-haspopup="dialog"
+      className={`flex cursor-pointer items-center gap-1.5 rounded px-1.5 py-1 text-meta text-muted transition-all duration-150 active:scale-[0.98] ${
         danger
-          ? "hover:bg-red-500/10 hover:text-red-600 dark:hover:text-red-400"
-          : "hover:bg-black/5 hover:text-stone-700 dark:hover:bg-white/10 dark:hover:text-stone-200"
+          ? "hover:bg-danger-soft hover:text-danger"
+          : "hover:bg-hover hover:text-body"
       }`}
     >
       {children}
@@ -419,8 +418,8 @@ function FooterAction({
 
 /**
  * A readable stand-in for a page with no title: its last path segment with the
- * hyphens opened out. Pages should carry a `#` heading — lint flags the ones
- * that do not — but a path in the sidebar is worse than an imperfect name.
+ * hyphens opened out. Pages should carry a `#` heading, and lint flags the ones
+ * that do not, but a path in the sidebar is worse than an imperfect name.
  */
 function readableId(id: string): string {
   const last = id.split("/").pop() ?? id;
@@ -460,101 +459,51 @@ function ProjectGroup({
   count: number;
   defaultOpen: boolean;
   /** Absent for Constraints, which is a heading over concepts/ rather than a folder. */
-  onDelete?: () => Promise<void>;
+  onDelete?: () => void;
   children: React.ReactNode;
 }) {
   const [open, setOpen] = useState(defaultOpen);
-  const [confirming, setConfirming] = useState(false);
 
   // A search result that lands in a closed group would be invisible.
   useEffect(() => {
     if (defaultOpen) setOpen(true);
   }, [defaultOpen]);
 
-  if (confirming) {
-    return (
-      <section className="mb-1 px-2 py-1">
-        <p className="text-[11px] leading-relaxed text-stone-500 dark:text-stone-400">
-          Move <span className="font-medium">{name}</span> and its {count}{" "}
-          {count === 1 ? "page" : "pages"} to the Trash?
-        </p>
-        <ConfirmRow
-          label="Move to Trash"
-          onConfirm={async () => {
-            setConfirming(false);
-            await onDelete?.();
-          }}
-          onCancel={() => setConfirming(false)}
-        />
-      </section>
-    );
-  }
-
   return (
-    <section className="mb-1">
+    <section className="mb-5">
       {/* A row, not a button: a button cannot nest inside a button. */}
-      <div className="group flex items-center rounded pr-1 transition-colors duration-150 hover:bg-black/4 dark:hover:bg-white/5">
+      <div className="group flex items-center rounded pr-1 transition-colors duration-150 hover:bg-hover">
         <button
           onClick={() => setOpen((v) => !v)}
-          className="flex min-w-0 flex-1 cursor-pointer items-center gap-1.5 px-2 py-1 text-left"
+          aria-expanded={open}
+          className="flex h-7 min-w-0 flex-1 cursor-pointer items-center gap-1.5 px-2 text-left transition-all duration-150 active:scale-[0.98]"
         >
           <ChevronIcon
             size={11}
-            className={`shrink-0 text-stone-400 transition-transform duration-150 ${open ? "rotate-90" : ""}`}
+            className={`shrink-0 text-faint transition-transform duration-150 ${open ? "rotate-90" : ""}`}
           />
-          <span className="truncate font-mono text-[10px] uppercase tracking-widest text-stone-400 dark:text-stone-500">
+          <span className="truncate font-mono text-micro uppercase tracking-[0.14em] text-muted">
             {name}
           </span>
-          <span className="tnum ml-auto font-mono text-[10px] text-stone-300 dark:text-stone-600">
-            {count}
-          </span>
+          <span className="tnum ml-auto font-mono text-micro text-faint">{count}</span>
         </button>
         {onDelete && (
           // Hidden until hover: a delete next to a constant control eventually gets hit.
+          // A native title rather than Tooltip, because this list scrolls and an
+          // overflow-y-auto parent clips both axes.
           <button
-            onClick={() => setConfirming(true)}
+            onClick={onDelete}
             title={`Delete ${name}`}
             aria-label={`Delete ${name}`}
-            className="ml-1 cursor-pointer rounded p-0.5 text-stone-300 opacity-0 transition-all duration-150 hover:text-red-600 group-hover:opacity-100 dark:text-stone-600 dark:hover:text-red-400"
+            aria-haspopup="dialog"
+            className="ml-1 cursor-pointer rounded p-0.5 text-faint opacity-0 transition-all duration-150 hover:text-danger active:scale-95 group-hover:opacity-100"
           >
             <TrashIcon size={12} />
           </button>
         )}
       </div>
-      {open && (
-        <div className="ml-2 border-l border-black/5 pl-1 dark:border-white/5">
-          {children}
-        </div>
-      )}
+      {open && <div className="mt-1 ml-2 border-l border-line-soft pl-1">{children}</div>}
     </section>
-  );
-}
-
-/** The confirm/cancel pair every destructive action in this window uses. */
-function ConfirmRow({
-  label,
-  onConfirm,
-  onCancel,
-}: {
-  label: string;
-  onConfirm: () => void;
-  onCancel: () => void;
-}) {
-  return (
-    <div className="mt-2 flex gap-2">
-      <button
-        onClick={onConfirm}
-        className="cursor-pointer rounded bg-red-600 px-2 py-1 text-[11px] font-medium text-white transition-all duration-150 hover:bg-red-700 active:scale-[0.98]"
-      >
-        {label}
-      </button>
-      <button
-        onClick={onCancel}
-        className="cursor-pointer px-1 text-[11px] text-stone-500 transition-all duration-150 hover:underline"
-      >
-        Cancel
-      </button>
-    </div>
   );
 }
 
@@ -572,24 +521,20 @@ function SidebarRow({
   return (
     <button
       onClick={onClick}
-      title={`${TYPE_LABEL[hit.type]} · ${relativeTime(hit.updated)}`}
-      className={`group relative mb-px flex w-full cursor-pointer items-center gap-2 rounded-md py-1.5 pl-2.5 pr-2 text-left transition-colors duration-150 before:absolute before:left-0 before:top-1/2 before:h-3.5 before:w-0.5 before:-translate-y-1/2 before:scale-y-0 before:rounded-full before:bg-brand before:transition-transform before:duration-150 ${
-        active
-          ? "bg-black/6 before:scale-y-100 dark:bg-white/10"
-          : "hover:bg-black/4 dark:hover:bg-white/5"
+      title={`${TYPE_LABEL[hit.type]}, ${relativeTime(hit.updated)}`}
+      className={`group relative mb-px flex h-8 w-full cursor-pointer items-center gap-2 rounded-md pl-2.5 pr-2 text-left transition-all duration-150 active:scale-[0.98] before:absolute before:left-0 before:top-1/2 before:h-3.5 before:w-0.5 before:-translate-y-1/2 before:scale-y-0 before:rounded-full before:bg-brand before:transition-transform before:duration-150 ${
+        active ? "bg-active before:scale-y-100" : "hover:bg-hover"
       }`}
     >
       <TypeIcon
         type={hit.type}
         size={13}
-        className={`shrink-0 ${active ? "text-brand" : "text-stone-400 dark:text-stone-500"}`}
+        className={`shrink-0 ${active ? "text-brand" : "text-muted"}`}
       />
-      <span
-        className={`truncate text-[13px] ${faded ? "text-stone-400 dark:text-stone-500" : ""}`}
-      >
+      <span className={`truncate text-ui ${faded ? "text-muted" : "text-body"}`}>
         {hit.title || readableId(hit.id)}
       </span>
-      <span className="tnum ml-auto shrink-0 font-mono text-[10px] text-stone-300 opacity-0 transition-opacity duration-150 group-hover:opacity-100 dark:text-stone-600">
+      <span className="tnum ml-auto shrink-0 font-mono text-micro text-faint opacity-0 transition-opacity duration-150 group-hover:opacity-100">
         {relativeTime(hit.updated).replace(" ago", "")}
       </span>
     </button>

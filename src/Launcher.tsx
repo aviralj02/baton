@@ -3,8 +3,9 @@ import { Command } from "cmdk";
 import * as api from "./lib/api";
 import { Logo } from "./components/Logo";
 import { IS_MAC } from "./lib/platform";
-import { ReturnIcon } from "./components/Icon";
+import { ArrowDownIcon, ArrowUpIcon, ReturnIcon } from "./components/Icon";
 import { Key } from "./components/Key";
+import { CAPS } from "./components/Label";
 import type { ProjectHit } from "./types";
 
 export default function Launcher() {
@@ -85,7 +86,7 @@ export default function Launcher() {
   }, [toast]);
 
   /// The only action in the launcher: the whole of one project's context on
-  /// the clipboard. Every page of it, assembled — the file split is an
+  /// the clipboard. Every page of it, assembled. The file split is an
   /// organisational detail of the wiki folder, not something a user chooses
   /// between at the moment they want to paste.
   const copyProject = async (slug?: string) => {
@@ -108,28 +109,28 @@ export default function Launcher() {
         onValueChange={setSelected}
         className="flex h-full flex-col"
       >
-        <div data-tauri-drag-region className="p-2.5 pb-1">
+        <div data-tauri-drag-region className="px-3 pt-3 pb-1">
           {/* focus-within rather than an outline: the ring clipped against the panel edge. */}
-          <div className="flex items-center gap-2.5 rounded-lg border border-black/10 bg-black/4 px-3 transition-colors duration-150 focus-within:border-brand/45 focus-within:bg-black/6 dark:border-white/10 dark:bg-white/5 dark:focus-within:bg-white/8">
+          <div className="flex items-center gap-2.5 rounded-lg border border-line bg-hover px-3 transition-all duration-200 focus-within:border-brand/45 focus-within:bg-active">
             {/* The mark sits where a magnifier would: branding that is also the affordance. */}
             <Logo size={15} className="shrink-0 text-brand" />
             <Command.Input
               value={query}
               onValueChange={setQuery}
               placeholder="Search projects"
-              className="w-full bg-transparent py-2.5 text-[15px] text-stone-900 outline-none placeholder:text-[15px] placeholder:text-stone-400 dark:text-stone-100 dark:placeholder:text-stone-500"
+              className="w-full bg-transparent py-2.5 text-input text-ink outline-none placeholder:text-input placeholder:text-muted"
             />
           </div>
         </div>
 
-        <Command.List className="flex-1 overflow-y-auto p-2">
+        <Command.List className="flex-1 overflow-y-auto px-2 pb-2">
           {rows.length === 0 && (
-            <div className="px-3 py-8 text-center">
-              <p className="text-sm text-stone-500 dark:text-stone-400">
+            <div className="px-3 py-10 text-center">
+              <p className="font-serif text-title text-body">
                 {trimmed ? `Nothing matches “${trimmed}”.` : "No context filed yet."}
               </p>
               {!trimmed && (
-                <p className="mt-1.5 text-[13px] text-stone-400 dark:text-stone-500">
+                <p className="mt-2 text-ui leading-relaxed text-muted">
                   Run <code className="font-mono text-brand">/baton</code> at the end of a
                   session and your projects appear here.
                 </p>
@@ -157,7 +158,12 @@ export default function Launcher() {
         </Command.List>
 
         <Footer>
-          <Key>↑↓</Key>
+          <Key label="Up arrow">
+            <ArrowUpIcon size={11} />
+          </Key>
+          <Key label="Down arrow">
+            <ArrowDownIcon size={11} />
+          </Key>
           <span className="mr-2">Move</span>
           <Key>esc</Key>
           <span>Close</span>
@@ -173,19 +179,19 @@ export default function Launcher() {
  * The fill is not optional: vibrancy samples whatever is behind the window, so
  * without it a dark-mode panel over a white background renders light and takes
  * the light text with it. What caused the doubled edge was the 1px border stroke
- * landing on the same 12px arc as the native one, so only that is gone — the
+ * landing on the same 12px arc as the native one, so only that is gone. The
  * radius still has to match `apply_vibrancy` or the corners paint square.
  */
 function Shell({ children, toast }: { children: React.ReactNode; toast: string | null }) {
   return (
     <div
-      className={`relative h-screen w-screen overflow-hidden rounded-xl bg-white/85 dark:bg-stone-900/80 ${
-        IS_MAC ? "" : "border border-black/10 dark:border-white/10"
+      className={`relative h-screen w-screen overflow-hidden rounded-xl bg-float/85 ${
+        IS_MAC ? "" : "border border-line"
       }`}
     >
       {children}
       {toast && (
-        <div className="pointer-events-none absolute bottom-11 left-1/2 -translate-x-1/2 rounded-md bg-stone-900/90 px-3 py-1.5 text-xs text-white shadow-lg dark:bg-stone-100/95 dark:text-stone-900">
+        <div className="pointer-events-none absolute bottom-11 left-1/2 -translate-x-1/2 rounded-full bg-ink px-3.5 py-1.5 text-ui text-surface shadow-lg">
           {toast}
         </div>
       )}
@@ -196,8 +202,8 @@ function Shell({ children, toast }: { children: React.ReactNode; toast: string |
 function Group({ heading, children }: { heading: string; children: React.ReactNode }) {
   return (
     <Command.Group
-      heading={heading}
-      className="mb-1 [&_[cmdk-group-heading]]:px-3 [&_[cmdk-group-heading]]:py-1.5 [&_[cmdk-group-heading]]:font-mono [&_[cmdk-group-heading]]:text-[10px] [&_[cmdk-group-heading]]:uppercase [&_[cmdk-group-heading]]:tracking-[0.12em] [&_[cmdk-group-heading]]:text-stone-400 dark:[&_[cmdk-group-heading]]:text-stone-500"
+      heading={<span className={CAPS}>{heading}</span>}
+      className="mb-1 [&_[cmdk-group-heading]]:px-3 [&_[cmdk-group-heading]]:py-2"
     >
       {children}
     </Command.Group>
@@ -206,7 +212,7 @@ function Group({ heading, children }: { heading: string; children: React.ReactNo
 
 // The amber bar is the selection: a pseudo-element that scales in from nothing.
 const ITEM_BASE =
-  "relative cursor-default rounded-md px-3 py-2 text-sm text-stone-700 transition-colors duration-100 before:absolute before:left-0 before:top-1/2 before:h-4 before:w-0.5 before:-translate-y-1/2 before:scale-y-0 before:rounded-full before:bg-brand before:transition-transform before:duration-150 data-[selected=true]:bg-stone-900/5 data-[selected=true]:before:scale-y-100 dark:text-stone-200 dark:data-[selected=true]:bg-white/10";
+  "relative flex h-9 cursor-default items-center gap-2 rounded-md px-3 text-read text-body transition-colors duration-100 before:absolute before:left-0 before:top-1/2 before:h-4 before:w-0.5 before:-translate-y-1/2 before:scale-y-0 before:rounded-full before:bg-brand before:transition-transform before:duration-150 data-[selected=true]:bg-active data-[selected=true]:text-ink data-[selected=true]:before:scale-y-100";
 
 function Item({
   children,
@@ -216,7 +222,7 @@ function Item({
   onSelect: () => void;
 }) {
   return (
-    <Command.Item onSelect={onSelect} className={`${ITEM_BASE} flex items-center gap-2`}>
+    <Command.Item onSelect={onSelect} className={ITEM_BASE}>
       {children}
     </Command.Item>
   );
@@ -235,14 +241,14 @@ function ProjectItem({ hit, onSelect }: { hit: ProjectHit; onSelect: () => void 
     <Command.Item
       value={`${hit.slug} ${hit.title}`}
       onSelect={onSelect}
-      className={`${ITEM_BASE} group flex items-center gap-2`}
+      className={`${ITEM_BASE} group`}
     >
       <span className="truncate font-medium">{hit.title}</span>
       <span className="ml-auto shrink-0 pl-3">
-        <span className="tnum font-mono text-[11px] text-stone-400 group-data-[selected=true]:hidden dark:text-stone-500">
+        <span className="tnum font-mono text-meta text-muted group-data-[selected=true]:hidden">
           {hit.pageCount} {hit.pageCount === 1 ? "page" : "pages"}
         </span>
-        <span className="hidden items-center gap-1 text-[11px] font-medium text-brand group-data-[selected=true]:flex">
+        <span className="hidden items-center gap-1 text-meta font-medium text-brand group-data-[selected=true]:flex">
           <ReturnIcon size={12} />
           Copy {hit.pageCount === 1 ? "page" : "all"}
         </span>
@@ -253,7 +259,7 @@ function ProjectItem({ hit, onSelect }: { hit: ProjectHit; onSelect: () => void 
 
 function Footer({ children }: { children: React.ReactNode }) {
   return (
-    <div className="flex items-center gap-1.5 border-t border-black/5 px-4 py-2 text-[11px] text-stone-400 dark:border-white/5 dark:text-stone-500">
+    <div className="flex items-center gap-1.5 border-t border-line px-4 py-2 text-meta text-muted">
       {children}
     </div>
   );
