@@ -69,7 +69,7 @@ export interface Primer {
   pagesDropped: number;
 }
 
-/** First-run state — mirrors `onboarding::WikiStatus`. */
+/** First-run state. Mirrors `onboarding::WikiStatus`. */
 export interface WikiStatus {
   root: string;
   rootExists: boolean;
@@ -87,7 +87,7 @@ export interface SkillHost {
   outdated: boolean;
 }
 
-/** A project row in the launcher — mirrors `db::ProjectHit`. */
+/** A project row in the launcher. Mirrors `db::ProjectHit`. */
 export interface ProjectHit {
   slug: string;
   title: string;

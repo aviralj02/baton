@@ -39,7 +39,7 @@ export const syncWiki = () => invoke<IndexReport>("sync_wiki");
 /** Moves one page's file to the trash. */
 export const deletePage = (id: string) => invoke<IndexReport>("delete_page", { id });
 
-/** Moves a whole project — every page under it — to the trash. */
+/** Moves a whole project, every page under it, to the trash. */
 export const deleteProject = (slug: string) =>
   invoke<IndexReport>("delete_project", { slug });
 
@@ -47,7 +47,7 @@ export const deleteProject = (slug: string) =>
 export const deleteEverything = () => invoke<IndexReport>("delete_everything");
 
 /**
- * Projects for the launcher — one row per project, never per page. A project's
+ * Projects for the launcher: one row per project, never per page. A project's
  * pages are an organisational detail of the wiki folder; what a user summons
  * Baton for is "give me everything about X".
  */
@@ -84,7 +84,7 @@ export const onLauncherShown = (fn: () => void) => listen("launcher-shown", fn);
 
 /**
  * Fires after the wiki folder changed on disk and was reindexed. Windows
- * refresh from this rather than polling — an agent writing pages mid-session
+ * refresh from this rather than polling, because an agent writing pages mid-session
  * should show up without a restart.
  */
 export const onWikiChanged = (fn: () => void) => listen("wiki-changed", fn);
