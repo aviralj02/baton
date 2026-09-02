@@ -9,7 +9,12 @@ export function Mark({ size = 24, className }: { size?: number; className?: stri
       className={className}
       aria-label="Baton"
     >
-      <path d="M9.75 14.25 18 6" stroke="currentColor" strokeWidth={3.5} strokeLinecap="round" />
+      <path
+        d="M9.75 14.25 18 6"
+        stroke="currentColor"
+        strokeWidth={3.5}
+        strokeLinecap="round"
+      />
       <path
         d="M4.5 15.75 7.75 12.5"
         stroke="currentColor"
