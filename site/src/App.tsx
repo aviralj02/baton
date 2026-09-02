@@ -2,6 +2,7 @@ import { useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { Mark } from "./Mark";
 import { GitHubLink, REPO_URL } from "./GitHubLink";
+import { Reveal } from "./Reveal";
 import { EASE, useMotionSafe } from "./anim";
 import {
   detectPlatform,
@@ -12,50 +13,49 @@ import {
   type Status,
 } from "./useRelease";
 
+/**
+ * The download page.
+ *
+ * Every entrance is a `Reveal`. They carry no timing: each takes the next slot
+ * from one page-wide queue as it is reached, so nothing ever arrives alongside
+ * anything else. The storyboard is at the top of `anim.ts`.
+ */
 export function App() {
   const { status, release } = useRelease();
   const platform = useState(detectPlatform)[0];
-  const m = useMotionSafe();
 
   return (
-    <div className="min-h-screen bg-stone-50 text-stone-900 antialiased dark:bg-stone-950 dark:text-stone-100">
-      <motion.main
-        variants={m.group(0.07)}
-        initial="hidden"
-        animate="shown"
-        className="mx-auto max-w-2xl px-6 py-16 sm:py-24"
-      >
-        <motion.div variants={m.rise} className="flex items-center justify-between">
+    <div className="min-h-screen bg-surface text-ink antialiased">
+      <main className="mx-auto max-w-2xl px-6 py-16 sm:py-24">
+        <Reveal className="flex items-center justify-between">
           <Mark className="text-brand" size={36} />
           <GitHubLink />
-        </motion.div>
+        </Reveal>
 
-        <motion.h1
-          variants={m.rise}
-          className="mt-10 text-3xl font-medium tracking-tight sm:text-4xl"
-        >
-          Your context, independent of the AI you&rsquo;re using.
-        </motion.h1>
+        <Reveal>
+          <h1 className="mt-12 font-serif text-hero tracking-tight sm:text-hero-lg">
+            Your context, independent of the AI you&rsquo;re using.
+          </h1>
+        </Reveal>
 
-        <motion.p
-          variants={m.rise}
-          className="mt-4 text-lg leading-relaxed text-stone-600 dark:text-stone-300"
-        >
-          You spend an hour with an AI getting somewhere real. Then the chat ends, and
-          the next one starts from nothing. Baton keeps what the session learned, and
-          hands it to whatever you open next.
-        </motion.p>
+        <Reveal>
+          <p className="mt-5 text-lede text-body">
+            You spend an hour with an AI getting somewhere real. Then the chat ends, and
+            the next one starts from nothing. Baton keeps what the session learned, and
+            hands it to whatever you open next.
+          </p>
+        </Reveal>
 
-        <motion.div variants={m.rise}>
+        <Reveal>
           <Downloads platform={platform} status={status} release={release} />
-        </motion.div>
+        </Reveal>
 
         <Loop />
         <Automatic />
         <Privacy />
 
         <Footer version={release?.version} />
-      </motion.main>
+      </main>
     </div>
   );
 }
@@ -90,12 +90,12 @@ function Downloads({
 
   return (
     <section className="mt-10">
-      <div className="flex flex-wrap items-center gap-4">
+      <div className="flex flex-wrap items-center gap-5">
         {platform === "windows" ? [windows, mac] : [mac, windows]}
       </div>
 
       {status === "unavailable" && (
-        <p className="mt-3 text-sm text-stone-500 dark:text-stone-400">
+        <p className="mt-4 text-ui text-muted">
           Couldn&rsquo;t reach GitHub for the latest build, so both buttons go to the{" "}
           <a className="text-brand hover:underline" href={RELEASES_URL}>
             releases page
@@ -106,6 +106,16 @@ function Downloads({
     </section>
   );
 }
+
+/**
+ * How far a button gives under a press. The same figure the app uses for
+ * `active:scale-[0.98]`, so a control feels identical in both places.
+ *
+ * Press is the only movement a button makes. Hover is a colour change: lifting
+ * a button towards the cursor animates the thing the cursor is already over,
+ * which reads as the page flinching rather than as the button responding.
+ */
+const PRESS = 0.98;
 
 function Button({
   primary,
@@ -124,8 +134,8 @@ function Button({
     return (
       <motion.a
         href={href}
-        whileHover={reduced ? undefined : { y: -1 }}
-        className="text-sm text-stone-500 underline-offset-4 transition-colors duration-200 hover:text-brand hover:underline dark:text-stone-400"
+        whileTap={reduced ? undefined : { scale: PRESS }}
+        className="text-read text-muted underline-offset-4 transition-colors duration-200 hover:text-brand hover:underline"
       >
         {label}
       </motion.a>
@@ -135,10 +145,9 @@ function Button({
   return (
     <motion.a
       href={href}
-      whileHover={reduced ? undefined : { y: -2 }}
-      whileTap={reduced ? undefined : { scale: 0.985 }}
+      whileTap={reduced ? undefined : { scale: PRESS }}
       transition={{ duration: 0.2, ease: EASE }}
-      className="inline-flex items-center gap-2 rounded-xl bg-brand px-5 py-3 font-medium text-white shadow-sm transition-colors duration-200 hover:bg-brand-strong dark:text-stone-900"
+      className="inline-flex h-11 items-center gap-2 rounded-full bg-brand px-6 text-read font-medium text-on-brand shadow-sm transition-colors duration-200 hover:bg-brand-strong"
     >
       {label}
       <AnimatePresence>
@@ -147,7 +156,7 @@ function Button({
             initial={{ opacity: 0, width: 0 }}
             animate={{ opacity: 0.7, width: "auto" }}
             transition={{ duration: 0.3, ease: EASE }}
-            className="tnum overflow-hidden whitespace-nowrap font-mono text-xs"
+            className="tnum overflow-hidden whitespace-nowrap font-mono text-meta"
           >
             {note}
           </motion.span>
@@ -158,62 +167,56 @@ function Button({
 }
 
 /** The loop, as three steps rather than a diagram nobody reads. */
-function Loop() {
-  const m = useMotionSafe();
-  const steps = [
-    {
-      title: "Your agent writes it",
-      body: (
-        <>
-          Finish a session, run <Code>/baton</Code>. The agent that did the work files
-          what it learned: decisions with the alternatives that lost, approaches that
-          failed, constraints that bit you.
-        </>
-      ),
-    },
-    {
-      title: "Baton keeps it",
-      body: (
-        <>
-          As plain markdown you own, on your machine. It works with git, and it works
-          offline.
-        </>
-      ),
-    },
-    {
-      title: "One key gets it back",
-      body: (
-        <>
-          Press the hotkey anywhere, pick a project, hit enter. Its whole context is on
-          your clipboard. Paste into Claude, ChatGPT, Cursor, Codex, anything.
-        </>
-      ),
-    },
-  ];
+const STEPS = [
+  {
+    title: "Your agent writes it",
+    body: (
+      <>
+        Finish a session, run <Code>/baton</Code>. The agent that did the work files what
+        it learned: decisions with the alternatives that lost, approaches that failed,
+        constraints that bit you.
+      </>
+    ),
+  },
+  {
+    title: "Baton keeps it",
+    body: (
+      <>
+        As plain markdown you own, on your machine. It works with git, and it works
+        offline.
+      </>
+    ),
+  },
+  {
+    title: "One key gets it back",
+    body: (
+      <>
+        Press the hotkey anywhere, pick a project, hit enter. Its whole context is on your
+        clipboard. Paste into Claude, ChatGPT, Cursor, Codex, anything.
+      </>
+    ),
+  },
+];
 
+function Loop() {
   return (
     <Section heading="How it works">
-      <motion.ol
-        variants={m.group(0.08)}
-        initial="hidden"
-        whileInView="shown"
-        viewport={{ once: true, margin: "-80px" }}
-        className="mt-4 space-y-5"
-      >
-        {steps.map((step, i) => (
-          <motion.li key={step.title} variants={m.rise} className="flex gap-4">
-            <span className="tnum mt-0.5 font-mono text-xs text-brand">
-              {String(i + 1).padStart(2, "0")}
-            </span>
-            <div className="min-w-0">
-              <h3 className="font-medium">{step.title}</h3>
-              <p className="mt-1 leading-relaxed text-stone-600 dark:text-stone-300">
-                {step.body}
-              </p>
-            </div>
-          </motion.li>
+      <ol className="flex flex-col gap-6">
+        {/* The Reveal sits inside the li: an ol may only contain list items. */}
+        {STEPS.map((step, i) => (
+          <li key={step.title}>
+            <Reveal onView className="flex gap-4">
+              <span className="tnum mt-1 font-mono text-meta text-brand">
+                {String(i + 1).padStart(2, "0")}
+              </span>
+              <div className="min-w-0">
+                <h3 className="text-read font-medium text-ink">{step.title}</h3>
+                <p className="mt-1 text-read text-body">{step.body}</p>
+              </div>
+            </Reveal>
+          </li>
         ))}
-      </motion.ol>
+      </ol>
     </Section>
   );
 }
@@ -227,96 +230,89 @@ function Loop() {
  * up and one with three pages in it.
  */
 function Automatic() {
-  const m = useMotionSafe();
-
   return (
     <Section heading="Make it automatic">
-      <motion.div
-        variants={m.group(0.07)}
-        initial="hidden"
-        whileInView="shown"
-        viewport={{ once: true, margin: "-80px" }}
-      >
-        <motion.p
-          variants={m.rise}
-          className="mt-3 leading-relaxed text-stone-600 dark:text-stone-300"
-        >
-          The one habit Baton depends on is running <Code>/baton</Code>. Put a line in
-          the instructions file your agent already reads &mdash;{" "}
-          <Code>CLAUDE.md</Code>, <Code>AGENTS.md</Code> or{" "}
-          <Code>.cursor/rules</Code> &mdash; and it happens without you remembering.
-        </motion.p>
+      <Reveal onView>
+        <p className="text-read text-body">
+          The one habit Baton depends on is running <Code>/baton</Code>. Put a line in the
+          instructions file your agent already reads, whether that is{" "}
+          <Code>CLAUDE.md</Code>, <Code>AGENTS.md</Code> or <Code>.cursor/rules</Code>,
+          and it happens without you remembering.
+        </p>
+      </Reveal>
 
-        <motion.pre
-          variants={m.rise}
-          className="mt-4 overflow-x-auto rounded-xl border border-black/10 bg-white/60 p-4 font-mono text-[13px] leading-relaxed text-stone-700 dark:border-white/10 dark:bg-white/5 dark:text-stone-300"
-        >
+      <Reveal onView>
+        <pre className="mt-5 overflow-x-auto rounded-xl border border-line bg-panel p-4 font-mono text-ui leading-relaxed text-body">
           <code>
             Run /baton every two or three exchanges, and again{"\n"}
             after finishing anything worth remembering.
           </code>
-        </motion.pre>
+        </pre>
+      </Reveal>
 
-        <motion.p
-          variants={m.rise}
-          className="mt-3 text-sm leading-relaxed text-stone-500 dark:text-stone-400"
-        >
-          Every session then leaves the next one better informed, whichever tool you
-          open it in.
-        </motion.p>
-      </motion.div>
+      <Reveal onView>
+        <p className="mt-4 text-ui text-muted">
+          Every session then leaves the next one better informed, whichever tool you open
+          it in.
+        </p>
+      </Reveal>
     </Section>
   );
 }
 
 function Privacy() {
-  const m = useMotionSafe();
-
   return (
     <Section heading="What it doesn't do">
-      <motion.p
-        variants={m.rise}
-        initial="hidden"
-        whileInView="shown"
-        viewport={{ once: true, margin: "-80px" }}
-        className="mt-3 leading-relaxed text-stone-600 dark:text-stone-300"
-      >
-        No account. No cloud. No telemetry. Baton makes no model calls and has no API
-        key of its own &mdash; your agent does the writing. Nothing leaves your machine,
-        and everything it keeps is a folder of markdown you can read, edit and delete.
-      </motion.p>
+      <Reveal onView>
+        <p className="text-read text-body">
+          No account. No cloud. No telemetry. Baton makes no model calls and has no API
+          key of its own, because your agent does the writing. Nothing leaves your
+          machine, and everything it keeps is a folder of markdown you can read, edit and
+          delete.
+        </p>
+      </Reveal>
     </Section>
   );
 }
 
 function Footer({ version }: { version?: string }) {
-  const m = useMotionSafe();
-
   return (
-    <motion.footer
-      variants={m.rise}
-      initial="hidden"
-      whileInView="shown"
-      viewport={{ once: true }}
-      className="mt-20 flex flex-wrap items-center gap-x-5 gap-y-2 border-t border-black/10 pt-6 text-sm text-stone-500 dark:border-white/10 dark:text-stone-400"
-    >
-      <a className="transition-colors hover:text-brand" href={RELEASES_URL}>
-        Releases
-      </a>
-      <a className="transition-colors hover:text-brand" href={`${REPO_URL}/blob/main/LICENSE`}>
-        MIT
-      </a>
-      {version && <span className="tnum ml-auto font-mono text-xs">v{version}</span>}
-    </motion.footer>
+    <Reveal onView>
+      <footer className="mt-24 flex flex-wrap items-center gap-x-5 gap-y-2 border-t border-line pt-6 text-ui text-muted">
+        <a
+          className="transition-colors duration-200 hover:text-brand"
+          href={RELEASES_URL}
+        >
+          Releases
+        </a>
+        <a
+          className="transition-colors duration-200 hover:text-brand"
+          href={`${REPO_URL}/blob/main/LICENSE`}
+        >
+          MIT
+        </a>
+        {version && <span className="tnum ml-auto font-mono text-meta">v{version}</span>}
+      </footer>
+    </Reveal>
   );
 }
 
+/**
+ * A section heading, in the app's own vocabulary: serif over a hairline.
+ *
+ * The heading and its rule are part of the sequence rather than standing there
+ * finished while the body fades in beneath them. That was the single biggest
+ * reason the old page did not read as sequential.
+ */
 function Section({ heading, children }: { heading: string; children: React.ReactNode }) {
   return (
     <section className="mt-16">
-      <h2 className="font-mono text-[11px] uppercase tracking-[0.14em] text-stone-400 dark:text-stone-500">
-        {heading}
-      </h2>
+      <Reveal onView>
+        <h2 className="font-serif text-title tracking-tight text-ink">{heading}</h2>
+      </Reveal>
+      <Reveal onView>
+        <div className="mt-2 mb-6 h-px bg-line" />
+      </Reveal>
       {children}
     </section>
   );
@@ -324,7 +320,7 @@ function Section({ heading, children }: { heading: string; children: React.React
 
 function Code({ children }: { children: React.ReactNode }) {
   return (
-    <code className="rounded bg-black/5 px-1.5 py-0.5 font-mono text-[13px] text-brand dark:bg-white/10">
+    <code className="rounded bg-panel px-1.5 py-0.5 font-mono text-ui text-brand">
       {children}
     </code>
   );
