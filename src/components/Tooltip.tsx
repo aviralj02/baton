@@ -5,7 +5,7 @@
  * and on an icon row it is the difference between a discoverable control and a
  * guess. Say what the control does, not what it is called.
  *
- * Only safe in a container that does not scroll — an `overflow-y-auto` parent
+ * Only safe in a container that does not scroll. An `overflow-y-auto` parent
  * clips both axes and would cut this off.
  */
 export function Tooltip({
@@ -20,7 +20,7 @@ export function Tooltip({
       {children}
       <span
         role="tooltip"
-        className="pointer-events-none absolute right-0 top-full z-20 mt-1.5 whitespace-nowrap rounded-md bg-stone-900 px-2 py-1 text-[11px] font-medium text-white opacity-0 shadow-md transition-opacity duration-150 group-focus-within/tip:opacity-100 group-hover/tip:opacity-100 group-hover/tip:delay-300 dark:bg-stone-100 dark:text-stone-900"
+        className="pointer-events-none absolute right-0 top-full z-20 mt-1.5 whitespace-nowrap rounded-md bg-ink px-2 py-1 text-meta font-medium text-surface opacity-0 shadow-md transition-opacity duration-150 group-focus-within/tip:opacity-100 group-hover/tip:opacity-100 group-hover/tip:delay-300"
       >
         {label}
       </span>
