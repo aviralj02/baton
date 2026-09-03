@@ -470,7 +470,7 @@ function ProjectGroup({
   }, [defaultOpen]);
 
   return (
-    <section className="mb-5">
+    <section className="mb-1">
       {/* A row, not a button: a button cannot nest inside a button. */}
       <div className="group flex items-center rounded pr-1 transition-colors duration-150 hover:bg-hover">
         <button
