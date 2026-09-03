@@ -1,23 +1,92 @@
 @import "tailwindcss";
 
-@theme {
-  --font-sans: ui-sans-serif, -apple-system, "Segoe UI", system-ui, sans-serif;
-  --font-mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
-  --color-brand: var(--brand);
-  --color-brand-strong: var(--brand-strong);
-}
-
-/* The app's palette, so the page looks like the thing it hands you. */
+/*
+ * The app's token layer, so the page looks like the thing it hands you.
+ *
+ * The colours are the same values as `src/index.css` in the app, down to the
+ * hex, and they flip with the system theme here for the same reason: a surface
+ * written twice is a surface that drifts. The type scale is deliberately not
+ * the same. The app is a dense utility read at a glance; this is a page read at
+ * arm's length, so the same names carry larger sizes.
+ */
 :root {
+  --surface: #ffffff;
+  --panel: #f6f5f4;
+  --line: #e7e5e4;
+  --line-soft: #f1efee;
+
+  --ink: #1c1917;
+  --body: #57534e;
+  --muted: #a8a29e;
+  --faint: #d6d3d1;
+
   --brand: #b8760c;
   --brand-strong: #8f5a08;
+  --brand-soft: rgba(184, 118, 12, 0.12);
+  --on-brand: #ffffff;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
+    --surface: #0c0a09;
+    --panel: #1a1715;
+    --line: #292524;
+    --line-soft: #1e1b19;
+
+    --ink: #f5f5f4;
+    --body: #a8a29e;
+    --muted: #78716c;
+    --faint: #57534e;
+
     --brand: #f2b33d;
     --brand-strong: #ffc659;
+    --brand-soft: rgba(242, 179, 61, 0.16);
+    --on-brand: #1c1917;
   }
+}
+
+@theme {
+  --font-sans: ui-sans-serif, -apple-system, "Segoe UI", system-ui, sans-serif;
+  /* Display only: the hero and the section headings. Body text stays sans. */
+  --font-serif:
+    ui-serif, "New York", "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+  --font-mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
+
+  --color-surface: var(--surface);
+  --color-panel: var(--panel);
+  --color-line: var(--line);
+  --color-line-soft: var(--line-soft);
+
+  --color-ink: var(--ink);
+  --color-body: var(--body);
+  --color-muted: var(--muted);
+  --color-faint: var(--faint);
+
+  --color-brand: var(--brand);
+  --color-brand-strong: var(--brand-strong);
+  --color-brand-soft: var(--brand-soft);
+  --color-on-brand: var(--on-brand);
+
+  --text-micro: 0.625rem;
+  --text-micro--line-height: 0.875rem;
+  --text-meta: 0.6875rem;
+  --text-meta--line-height: 1rem;
+  --text-ui: 0.8125rem;
+  --text-ui--line-height: 1.25rem;
+  --text-read: 1rem;
+  --text-read--line-height: 1.625rem;
+  --text-lede: 1.125rem;
+  --text-lede--line-height: 1.75rem;
+  --text-title: 1.375rem;
+  --text-title--line-height: 1.875rem;
+  --text-hero: 2.25rem;
+  --text-hero--line-height: 2.5rem;
+  --text-hero-lg: 3rem;
+  --text-hero-lg--line-height: 3.25rem;
+}
+
+::selection {
+  background: var(--brand-soft);
 }
 
 .tnum {

@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import * as api from "../lib/api";
 import { Logo } from "./Logo";
+import { Button } from "./Button";
+import { CheckIcon, CircleIcon } from "./Icon";
 import type { WikiStatus } from "../types";
 
 /**
@@ -8,7 +10,7 @@ import type { WikiStatus } from "../types";
  *
  * Baton indexes a wiki it does not write. Without the `/baton` skill installed
  * in an agent tool, a new user reaches an empty launcher telling them to run a
- * command that does not exist — so the one step the app cannot do for itself is
+ * command that does not exist, so the one step the app cannot do for itself is
  * the one thing this screen exists to do.
  *
  * The wiki folder is already created by the time this renders (it is Baton's
@@ -36,107 +38,104 @@ export function Setup({ status, onDone }: { status: WikiStatus; onDone: () => vo
   };
 
   return (
-    <div className="flex h-full flex-col overflow-y-auto px-6 py-5">
-      <div className="mb-4 flex items-center gap-2.5">
-        <Logo size={20} />
-        <h1 className="text-[15px] font-medium dark:text-stone-100">Set up Baton</h1>
-      </div>
+    <div className="h-full overflow-y-auto px-8 py-10">
+      <div className="mx-auto max-w-lg">
+        <div className="mb-3 flex items-center gap-2.5">
+          <Logo size={20} className="text-brand" />
+          <h1 className="font-serif text-display tracking-tight text-ink">
+            Set up Baton
+          </h1>
+        </div>
 
-      <p className="mb-5 text-sm leading-relaxed text-stone-600 dark:text-stone-300">
-        Baton reads a wiki that your coding agent writes. It never calls a model itself —
-        so the agent needs a{" "}
-        <code className="rounded bg-black/5 px-1 py-0.5 text-[12px] dark:bg-white/10">
-          /baton
-        </code>{" "}
-        command to file what it learned.
-      </p>
-
-      <Step n={1} done title="Wiki folder created">
-        <button
-          onClick={() => void api.revealWiki()}
-          className="font-mono text-[12px] text-stone-500 underline-offset-2 hover:underline dark:text-stone-400"
-        >
-          {status.root}
-        </button>
-      </Step>
-
-      <Step
-        n={2}
-        done={detected.length > 0 && missing.length === 0}
-        title="Install the /baton command"
-      >
-        {detected.length === 0 ? (
-          <p className="text-[13px] text-stone-500 dark:text-stone-400">
-            No agent tools found. Install Claude Code, Codex, or Cursor, then reopen this
-            screen.
-          </p>
-        ) : (
-          <>
-            <ul className="mb-2 space-y-1">
-              {detected.map((s) => (
-                <li
-                  key={s.name}
-                  className="flex items-center gap-2 text-[13px] text-stone-600 dark:text-stone-300"
-                >
-                  <span
-                    className={
-                      s.installed && !s.outdated
-                        ? "text-brand"
-                        : "text-stone-300 dark:text-stone-600"
-                    }
-                  >
-                    ●
-                  </span>
-                  {s.name}
-                  {s.outdated && (
-                    <span className="text-[11px] text-stone-400 dark:text-stone-500">
-                      needs updating
-                    </span>
-                  )}
-                </li>
-              ))}
-            </ul>
-            {missing.length > 0 && (
-              <button
-                onClick={() => void install()}
-                disabled={busy}
-                className="cursor-pointer rounded-md bg-brand px-2.5 py-1 text-xs font-medium text-white transition-all duration-150 hover:bg-brand-strong active:scale-[0.98] disabled:opacity-50 dark:text-stone-900"
-              >
-                {busy
-                  ? "Installing…"
-                  : `Install for ${missing.length} tool${missing.length > 1 ? "s" : ""}`}
-              </button>
-            )}
-            {installed && (
-              <p className="mt-2 text-[12px] text-brand">
-                Installed for {installed.join(", ")}.
-              </p>
-            )}
-            {error && (
-              <p className="mt-2 text-[12px] text-red-600 dark:text-red-400">{error}</p>
-            )}
-          </>
-        )}
-      </Step>
-
-      <Step n={3} done={status.pageCount > 0} title="File your first session">
-        <p className="text-[13px] leading-relaxed text-stone-500 dark:text-stone-400">
-          Finish a piece of work with your agent, then run{" "}
-          <code className="rounded bg-black/5 px-1 py-0.5 text-[12px] dark:bg-white/10">
-            /baton
-          </code>
-          . It files what the session learned without asking. After that, press the hotkey
-          anywhere to copy a project's context into a fresh session.
+        <p className="mb-8 text-read text-body">
+          Baton reads a wiki that your coding agent writes. It never calls a model itself,
+          so the agent needs a <Code>/baton</Code> command to file what it learned.
         </p>
-      </Step>
 
-      <button
-        onClick={onDone}
-        className="mt-5 self-start text-[13px] text-stone-500 underline-offset-2 hover:underline dark:text-stone-400"
-      >
-        {status.pageCount > 0 ? "Done" : "Skip for now"}
-      </button>
+        <Step n={1} done title="Wiki folder created">
+          <button
+            onClick={() => void api.revealWiki()}
+            className="cursor-pointer font-mono text-ui text-muted underline-offset-2 transition-all duration-150 hover:text-ink hover:underline active:scale-[0.98]"
+          >
+            {status.root}
+          </button>
+        </Step>
+
+        <Step
+          n={2}
+          done={detected.length > 0 && missing.length === 0}
+          title="Install the /baton command"
+        >
+          {detected.length === 0 ? (
+            <p className="text-ui leading-relaxed text-body">
+              No agent tools found. Install Claude Code, Codex, or Cursor, then reopen
+              this screen.
+            </p>
+          ) : (
+            <>
+              <ul className="mb-3">
+                {detected.map((s) => {
+                  const ready = s.installed && !s.outdated;
+                  return (
+                    <li
+                      key={s.name}
+                      className="flex items-center gap-2 border-b border-line-soft py-1.5 text-ui text-body last:border-0"
+                    >
+                      {ready ? (
+                        <CheckIcon size={13} className="shrink-0 text-brand" />
+                      ) : (
+                        <CircleIcon size={13} className="shrink-0 text-faint" />
+                      )}
+                      {s.name}
+                      {s.outdated && (
+                        <span className="ml-auto text-meta text-muted">
+                          needs updating
+                        </span>
+                      )}
+                    </li>
+                  );
+                })}
+              </ul>
+              {missing.length > 0 && (
+                <Button variant="primary" disabled={busy} onClick={() => void install()}>
+                  {busy
+                    ? "Installing…"
+                    : `Install for ${missing.length} tool${missing.length > 1 ? "s" : ""}`}
+                </Button>
+              )}
+              {installed && (
+                <p className="mt-2 text-ui text-brand">
+                  Installed for {installed.join(", ")}.
+                </p>
+              )}
+              {error && <p className="mt-2 text-ui text-danger">{error}</p>}
+            </>
+          )}
+        </Step>
+
+        <Step n={3} done={status.pageCount > 0} title="File your first session">
+          <p className="text-ui leading-relaxed text-body">
+            Finish a piece of work with your agent, then run <Code>/baton</Code>. It files
+            what the session learned without asking. After that, press the hotkey anywhere
+            to copy a project's context into a fresh session.
+          </p>
+        </Step>
+
+        <div className="mt-8 border-t border-line pt-5">
+          <Button onClick={onDone}>
+            {status.pageCount > 0 ? "Done" : "Skip for now"}
+          </Button>
+        </div>
+      </div>
     </div>
+  );
+}
+
+function Code({ children }: { children: React.ReactNode }) {
+  return (
+    <code className="rounded bg-panel px-1 py-0.5 font-mono text-ui text-ink">
+      {children}
+    </code>
   );
 }
 
@@ -152,18 +151,16 @@ function Step({
   children: React.ReactNode;
 }) {
   return (
-    <section className="mb-5 flex gap-3">
+    <section className="mb-7 flex gap-3.5">
       <span
-        className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[11px] font-medium ${
-          done
-            ? "bg-brand text-white dark:text-stone-900"
-            : "bg-black/10 text-stone-500 dark:bg-white/15 dark:text-stone-300"
+        className={`mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full text-meta font-medium ${
+          done ? "bg-brand text-on-brand" : "bg-panel text-muted"
         }`}
       >
-        {done ? "✓" : n}
+        {done ? <CheckIcon size={12} /> : n}
       </span>
       <div className="min-w-0 flex-1">
-        <h2 className="mb-1 text-[13px] font-medium dark:text-stone-100">{title}</h2>
+        <h2 className="mb-1.5 text-ui font-medium text-ink">{title}</h2>
         {children}
       </div>
     </section>

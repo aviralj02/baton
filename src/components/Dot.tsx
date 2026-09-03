@@ -7,7 +7,7 @@ export function Dot() {
   return (
     <span
       aria-hidden="true"
-      className="inline-block size-1 shrink-0 rounded-full bg-stone-300 dark:bg-stone-600"
+      className="inline-block size-1 shrink-0 rounded-full bg-faint"
     />
   );
 }

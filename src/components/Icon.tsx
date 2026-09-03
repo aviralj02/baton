@@ -113,6 +113,81 @@ export function ReturnIcon(p: IconProps) {
   );
 }
 
+/**
+ * The four modifier keys.
+ *
+ * Drawn rather than typed. `⌘ ⇧ ⌥ ⌃` are characters, so they arrive at whatever
+ * weight the mono face happens to have, sit off the cap's optical centre, and
+ * ignore the icon size scale. As paths they match every other mark in this file.
+ */
+export function CommandIcon(p: IconProps) {
+  return (
+    <Svg {...p}>
+      <path d="M10 4v8a2 2 0 1 0 2-2H4a2 2 0 1 0 2 2V4a2 2 0 1 0-2 2h8a2 2 0 1 0-2-2" />
+    </Svg>
+  );
+}
+
+export function ShiftIcon(p: IconProps) {
+  return (
+    <Svg {...p}>
+      <path d="M8 2.4 2.9 8h2.9v5.2h4.4V8h2.9z" />
+    </Svg>
+  );
+}
+
+export function ControlIcon(p: IconProps) {
+  return (
+    <Svg {...p}>
+      <path d="m3.4 10.2 4.6-4.4 4.6 4.4" />
+    </Svg>
+  );
+}
+
+export function OptionIcon(p: IconProps) {
+  return (
+    <Svg {...p}>
+      <path d="M2.6 4.4h3.6l4.6 7.2h2.6" />
+      <path d="M9.6 4.4h3.8" />
+    </Svg>
+  );
+}
+
+export function ArrowUpIcon(p: IconProps) {
+  return (
+    <Svg {...p}>
+      <path d="M8 13V4" />
+      <path d="m4.2 7.8 3.8-3.8 3.8 3.8" />
+    </Svg>
+  );
+}
+
+export function ArrowDownIcon(p: IconProps) {
+  return (
+    <Svg {...p}>
+      <path d="M8 3v9" />
+      <path d="m11.8 8.2-3.8 3.8-3.8-3.8" />
+    </Svg>
+  );
+}
+
+export function CheckIcon(p: IconProps) {
+  return (
+    <Svg {...p}>
+      <path d="m3.4 8.4 3 3 6.2-6.8" />
+    </Svg>
+  );
+}
+
+/** A step that has not happened yet: the unfilled counterpart to the check. */
+export function CircleIcon(p: IconProps) {
+  return (
+    <Svg {...p}>
+      <circle cx="8" cy="8" r="4.6" />
+    </Svg>
+  );
+}
+
 export function LinkIcon(p: IconProps) {
   return (
     <Svg {...p}>

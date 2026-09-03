@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import * as api from "../lib/api";
-import { IS_MAC } from "../lib/platform";
-import { Key } from "./Key";
+import { Shortcut } from "./Shortcut";
+import { Button } from "./Button";
 
 /**
  * Settings, of which there is currently one.
@@ -51,28 +51,31 @@ export function Settings({ onNotice }: { onNotice: (message: string) => void }) 
 
   return (
     <div className="mx-auto flex h-full max-w-lg flex-col justify-center px-8">
-      <h1 className="text-lg font-medium">Settings</h1>
+      <h1 className="font-serif text-display tracking-tight text-ink">Settings</h1>
 
-      <section className="mt-6 flex items-start justify-between gap-6 border-t border-black/10 pt-5 dark:border-white/10">
+      <section className="mt-6 flex items-start justify-between gap-6 border-t border-line pt-5">
         <div className="min-w-0">
-          <h2 className="text-[13px] font-medium">Summon Baton</h2>
-          <p className="mt-1 text-[13px] leading-relaxed text-stone-500 dark:text-stone-400">
+          <h2 className="text-ui font-medium text-ink">Summon Baton</h2>
+          <p className="mt-1.5 text-ui leading-relaxed text-body">
             {recording
               ? "Press the combination you want. Escape to cancel."
               : "Works from any app, including over a fullscreen window."}
           </p>
         </div>
 
-        <button
+        <Button
+          variant={recording ? "armed" : "quiet"}
+          pressed={recording}
           onClick={() => setRecording((v) => !v)}
-          className={`flex shrink-0 items-center gap-1 rounded-md border px-2.5 py-1.5 text-xs transition-all duration-150 active:scale-[0.98] ${
-            recording
-              ? "border-brand bg-brand/10 text-brand"
-              : "cursor-pointer border-black/10 hover:bg-black/5 dark:border-white/10 dark:hover:bg-white/10"
-          }`}
         >
-          {recording ? "Listening…" : shortcut ? <Key>{prettify(shortcut)}</Key> : "…"}
-        </button>
+          {recording ? (
+            "Listening…"
+          ) : shortcut ? (
+            <Shortcut accelerator={shortcut} />
+          ) : (
+            "…"
+          )}
+        </Button>
       </section>
     </div>
   );
@@ -123,15 +126,4 @@ function namedKey(e: KeyboardEvent): string | null {
     ArrowRight: "Right",
   };
   return named[e.code] ?? null;
-}
-
-/** An accelerator as keycaps someone would recognise. */
-export function prettify(accelerator: string): string {
-  const glyphs: Record<string, string> = IS_MAC
-    ? { Super: "⌘", CmdOrCtrl: "⌘", Control: "⌃", Alt: "⌥", Shift: "⇧" }
-    : { Super: "Win", CmdOrCtrl: "Ctrl", Control: "Ctrl", Alt: "Alt", Shift: "Shift" };
-  return accelerator
-    .split("+")
-    .map((part) => glyphs[part] ?? part)
-    .join(IS_MAC ? "" : "+");
 }

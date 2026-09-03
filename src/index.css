@@ -1,22 +1,149 @@
 @import "tailwindcss";
 
-@theme {
-  --font-sans: ui-sans-serif, -apple-system, "Segoe UI", system-ui, sans-serif;
-  --font-mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
-  --color-brand: var(--brand);
-  --color-brand-strong: var(--brand-strong);
-}
-
-/* One accent, three jobs: the mark, the selected row, the primary action. */
+/*
+ * The token layer.
+ *
+ * Every colour in the app resolves from here, and every one of them flips with
+ * the system theme, so components carry no `dark:` variants. A value written in
+ * two places drifts in one of them, and a launcher that reads its own palette
+ * twice is how a dark panel ends up with light-mode text.
+ *
+ * One elevation step (`panel`) covers cards, inputs and keycaps. Two steps in an
+ * app this small is two things to keep in step for no gain.
+ */
 :root {
+  --surface: #ffffff;
+  --panel: #f6f5f4;
+  --line: #e7e5e4;
+  --line-soft: #f1efee;
+
+  --ink: #1c1917;
+  --body: #57534e;
+  --muted: #a8a29e;
+  --faint: #d6d3d1;
+
+  /* The launcher's own fill, tuned against vibrancy rather than derived. */
+  --float: #ffffff;
+
+  /* Two translucent overlay steps. They sit on any fill, opaque or not. */
+  --hover: rgba(28, 25, 23, 0.045);
+  --active: rgba(28, 25, 23, 0.075);
+
+  /* One accent, three jobs: the mark, the selected row, the primary action. */
   --brand: #b8760c;
   --brand-strong: #8f5a08;
+  --brand-soft: rgba(184, 118, 12, 0.12);
+  --on-brand: #ffffff;
+
+  /* The scrim is not a surface, so it does not invert with one. */
+  --scrim: rgba(28, 25, 23, 0.4);
+
+  --danger: #dc2626;
+  --danger-strong: #b91c1c;
+  --danger-soft: rgba(220, 38, 38, 0.1);
+  /* Red does not invert, so what sits on it must not either. */
+  --on-danger: #ffffff;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
+    --surface: #0c0a09;
+    --panel: #1a1715;
+    --line: #292524;
+    --line-soft: #1e1b19;
+
+    --ink: #f5f5f4;
+    --body: #a8a29e;
+    --muted: #78716c;
+    --faint: #57534e;
+
+    --float: #1c1917;
+
+    /* Lighter, never darker: a dark hover that goes down reads as a hole. */
+    --hover: rgba(255, 255, 255, 0.055);
+    --active: rgba(255, 255, 255, 0.09);
+
     --brand: #f2b33d;
     --brand-strong: #ffc659;
+    --brand-soft: rgba(242, 179, 61, 0.16);
+    --on-brand: #1c1917;
+
+    --scrim: rgba(0, 0, 0, 0.65);
+
+    --danger: #ef5350;
+    --danger-strong: #f2635f;
+    --danger-soft: rgba(239, 83, 80, 0.16);
+  }
+}
+
+@theme {
+  --font-sans: ui-sans-serif, -apple-system, "Segoe UI", system-ui, sans-serif;
+  /* Display only: titles, section headings, the wordmark. Body text stays sans. */
+  --font-serif:
+    ui-serif, "New York", "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+  --font-mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
+
+  --color-surface: var(--surface);
+  --color-panel: var(--panel);
+  --color-float: var(--float);
+  --color-line: var(--line);
+  --color-line-soft: var(--line-soft);
+
+  --color-ink: var(--ink);
+  --color-body: var(--body);
+  --color-muted: var(--muted);
+  --color-faint: var(--faint);
+
+  --color-hover: var(--hover);
+  --color-active: var(--active);
+
+  --color-brand: var(--brand);
+  --color-brand-strong: var(--brand-strong);
+  --color-brand-soft: var(--brand-soft);
+  --color-on-brand: var(--on-brand);
+
+  --color-scrim: var(--scrim);
+
+  --color-danger: var(--danger);
+  --color-danger-strong: var(--danger-strong);
+  --color-danger-soft: var(--danger-soft);
+  --color-on-danger: var(--on-danger);
+
+  /*
+   * The type scale. Seven steps, each with a job, so no surface has to invent a
+   * size: caps labels, counts and timestamps, list rows and controls, prose,
+   * the launcher field, a section heading, a page title.
+   */
+  --text-micro: 0.625rem;
+  --text-micro--line-height: 0.875rem;
+  --text-meta: 0.6875rem;
+  --text-meta--line-height: 1rem;
+  --text-ui: 0.8125rem;
+  --text-ui--line-height: 1.125rem;
+  --text-read: 0.875rem;
+  --text-read--line-height: 1.5rem;
+  --text-input: 0.9375rem;
+  --text-input--line-height: 1.375rem;
+  --text-title: 1.0625rem;
+  --text-title--line-height: 1.5rem;
+  --text-display: 1.5rem;
+  --text-display--line-height: 1.875rem;
+
+  /* A dialog arrives; it does not appear. Both are cut by reduced motion below. */
+  --animate-scrim: scrim-in 0.15s ease-out;
+  --animate-panel: panel-in 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes scrim-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes panel-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px) scale(0.985);
   }
 }
 
@@ -35,9 +162,39 @@ body {
   -webkit-user-select: none;
 }
 
+::selection {
+  background: var(--brand-soft);
+}
+
 /* Data reads as data: counts and timestamps must not reflow as digits change. */
 .tnum {
   font-variant-numeric: tabular-nums;
+}
+
+/*
+ * A scrollbar wide enough to grab and quiet enough to ignore. The default track
+ * paints a light gutter that in dark mode reads as a seam down the sidebar.
+ */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--faint);
+  border: 3px solid transparent;
+  background-clip: content-box;
+  border-radius: 999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--muted);
+  border: 3px solid transparent;
+  background-clip: content-box;
 }
 
 /* Controls only: a text field shows focus with its caret and needs no ring. */
