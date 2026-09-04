@@ -1,0 +1,15 @@
+<!--
+  The mark alone, on nothing.
+
+  logo.svg is the currentColor source of truth but its 24-unit box is the
+  drawing grid, not the mark: the shape sits high and left inside it, so
+  anything that centres that file centres the wrong rectangle. This one is
+  padded evenly around the mark's real bounding box and carries the brand amber
+  outright, for a background that has no inherited text colour.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024" fill="none">
+  <g transform="translate(37.9375 78.9375) scale(41)" stroke="#F2B33D" stroke-linecap="round">
+    <path d="M9.75 14.25 18 6" stroke-width="3.5"/>
+    <path d="M4.5 15.75 7.75 12.5" stroke-width="2.25" stroke-opacity="0.5"/>
+  </g>
+</svg>

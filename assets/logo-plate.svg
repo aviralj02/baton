@@ -1,0 +1,26 @@
+<!--
+  The mark on its plate, for places that are not the dock: a social avatar, a
+  README hero, a slide.
+
+  Same squircle as icon.svg, but the mark is centred on its own bounding box and
+  sits at 48% of the plate rather than 59%. The app icon is drawn tight because
+  the dock renders it at 64px beside a hundred others; a 400px avatar wants the
+  breathing room instead, and the trail only separates from the baton when it
+  has some.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024" fill="none">
+  <defs>
+    <linearGradient id="ground" x1="0" y1="0" x2="1024" y2="1024" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#302B27"/>
+      <stop offset="1" stop-color="#181513"/>
+    </linearGradient>
+  </defs>
+
+  <rect x="100" y="100" width="824" height="824" rx="185" fill="url(#ground)"/>
+
+  <!-- logo.svg's 24-unit mark, scaled 24x and centred on its bounding box. -->
+  <g transform="translate(234.5 258.5) scale(24)" stroke="#F2B33D" stroke-linecap="round">
+    <path d="M9.75 14.25 18 6" stroke-width="3.5"/>
+    <path d="M4.5 15.75 7.75 12.5" stroke-width="2.25" stroke-opacity="0.5"/>
+  </g>
+</svg>
